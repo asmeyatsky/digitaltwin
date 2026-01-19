@@ -1,0 +1,23 @@
+{
+    "name": "DigitalTwin.Tests",
+    "rootNamespace": "DigitalTwin.Tests",
+    "references": [
+        "DigitalTwin.Core",
+        "DigitalTwin.Application",
+        "DigitalTwin.Infrastructure",
+        "DigitalTwin.Presentation",
+        "UnityEngine",
+        "UnityEngine.TestTools",
+        "NUnit",
+        "nunit.framework"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

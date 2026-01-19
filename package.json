@@ -1,0 +1,43 @@
+{
+  "name": "DigitalTwinCore",
+  "version": "1.0.0",
+  "displayName": "Digital Twin Core Components",
+  "description": "Core domain entities and business logic for digital twin building management system with Unity integration.",
+  "unity": "2022.3",
+  "unityRelease": "0.0",
+  "author": {
+    "name": "Digital Twin Team",
+    "email": "team@digitaltwin.com",
+    "url": "https://www.digitaltwin.com"
+  },
+  "keywords": [
+    "digital twin",
+    "building management",
+    "smart building",
+    "energy monitoring",
+    "environmental control",
+    "iot",
+    "facility management",
+    "real-time monitoring",
+    "building automation"
+  ],
+  "dependencies": {
+    "com.unity.modules.ui": "1.0.0"
+  },
+  "samples": [
+    {
+      "displayName": "Digital Twin Demo",
+      "description": "Complete demo of a digital twin building with monitoring and control capabilities",
+      "path": "Samples/DigitalTwinDemo"
+    }
+  ],
+  "documentationUrl": "https://github.com/digitaltwin/docs",
+  "changelogUrl": "https://github.com/digitaltwin/changelog",
+  "licensesUrl": "https://github.com/digitaltwin/license",
+  "hideInEditor": false,
+  "testables": [
+    "DigitalTwin.Tests.EditMode.Core",
+    "DigitalTwin.Tests.PlayMode.Infrastructure"
+  ],
+  "type": "library"
+}

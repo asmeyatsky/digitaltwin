@@ -1,0 +1,16 @@
+{
+    "name": "DigitalTwin.Application",
+    "rootNamespace": "DigitalTwin.Application",
+    "references": [
+        "DigitalTwin.Core"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": true
+}

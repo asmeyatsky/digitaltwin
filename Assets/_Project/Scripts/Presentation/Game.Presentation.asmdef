@@ -1,0 +1,20 @@
+{
+    "name": "DigitalTwin.Presentation",
+    "rootNamespace": "DigitalTwin.Presentation",
+    "references": [
+        "DigitalTwin.Core",
+        "DigitalTwin.Infrastructure",
+        "UnityEngine",
+        "UnityEngine.UI",
+        "Unity.TextMeshPro"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

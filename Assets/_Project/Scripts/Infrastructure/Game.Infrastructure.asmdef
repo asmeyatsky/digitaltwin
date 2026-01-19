@@ -1,0 +1,19 @@
+{
+    "name": "DigitalTwin.Infrastructure",
+    "rootNamespace": "DigitalTwin.Infrastructure",
+    "references": [
+        "DigitalTwin.Core",
+        "DigitalTwin.Application",
+        "UnityEngine",
+        "UnityEditor"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
