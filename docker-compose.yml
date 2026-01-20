@@ -19,10 +19,12 @@ services:
       - JwtConfiguration__ExpiryInMinutes=60
       - Redis__ConnectionString=redis:6379
       - RabbitMQ__ConnectionString=amqp://guest:guest@rabbitmq:5672
+      - DeepFace__BaseUrl=http://deepface:8001
     depends_on:
       - postgres
       - redis
       - rabbitmq
+      - deepface
     volumes:
       - ./logs:/app/logs
       - ./data:/app/data
@@ -225,6 +227,33 @@ services:
     networks:
       - digitaltwin-network
     restart: unless-stopped
+
+  # DeepFace Emotion Recognition Service
+  deepface:
+    build:
+      context: ./services/deepface-service
+      dockerfile: Dockerfile
+    container_name: digitaltwin-deepface
+    ports:
+      - "8001:8001"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TF_CPP_MIN_LOG_LEVEL=2
+    networks:
+      - digitaltwin-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
 
 volumes:
   postgres_data:
