@@ -255,6 +255,59 @@ services:
         reservations:
           memory: 2G
 
+  # Avatar Generation Service (3D face reconstruction)
+  avatar-generation:
+    build:
+      context: ./services/avatar-generation-service
+      dockerfile: Dockerfile
+    container_name: digitaltwin-avatar-gen
+    ports:
+      - "8002:8002"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - AVATAR_STORAGE_PATH=/app/avatars
+    volumes:
+      - avatar_data:/app/avatars
+    networks:
+      - digitaltwin-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+
+  # Voice Service (ElevenLabs TTS + Voice Cloning)
+  voice-service:
+    build:
+      context: ./services/voice-service
+      dockerfile: Dockerfile
+    container_name: digitaltwin-voice
+    ports:
+      - "8003:8003"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+      - VOICE_STORAGE_PATH=/app/voices
+    volumes:
+      - voice_data:/app/voices
+    networks:
+      - digitaltwin-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/health')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+
 volumes:
   postgres_data:
     driver: local
@@ -269,6 +322,10 @@ volumes:
   elasticsearch_data:
     driver: local
   minio_data:
+    driver: local
+  avatar_data:
+    driver: local
+  voice_data:
     driver: local
 
 networks:
