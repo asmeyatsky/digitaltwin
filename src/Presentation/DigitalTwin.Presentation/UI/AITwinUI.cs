@@ -48,7 +48,7 @@ namespace DigitalTwin.Presentation.UI
         
         [Header("Settings Panel")]
         [SerializeField] private GameObject settingsPanel;
-       SerializeField] private Toggle learningModeToggle;
+        [SerializeField] private Toggle learningModeToggle;
         [SerializeField] private Slider personalityFriendlinessSlider;
         [SerializeField] private Slider personalityProfessionalismSlider;
         [SerializeField] private Slider personalityCuriositySlider;

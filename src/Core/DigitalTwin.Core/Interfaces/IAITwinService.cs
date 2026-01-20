@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using DigitalTwin.Core.DTOs;
+using DigitalTwin.Core.Entities;
 
 namespace DigitalTwin.Core.Interfaces
 {
@@ -203,5 +204,57 @@ namespace DigitalTwin.Core.Interfaces
         /// Analyzes speech patterns for emotion
         /// </summary>
         Task<SpeechEmotion> AnalyzeSpeechEmotionAsync(byte[] audioData);
+    }
+
+    /// <summary>
+    /// Building repository interface for data access
+    /// </summary>
+    public interface IBuildingRepository
+    {
+        Task<Building> GetByIdAsync(Guid id);
+        Task<List<Building>> GetAllAsync();
+        Task<Building> AddAsync(Building building);
+        Task<Building> UpdateAsync(Building building);
+        Task<bool> DeleteAsync(Guid id);
+        Task<List<Building>> GetByUserIdAsync(string userId);
+    }
+
+    /// <summary>
+    /// Sensor repository interface for data access
+    /// </summary>
+    public interface ISensorRepository
+    {
+        Task<Sensor> GetByIdAsync(Guid id);
+        Task<List<Sensor>> GetAllAsync();
+        Task<List<Sensor>> GetByRoomIdAsync(Guid roomId);
+        Task<List<Sensor>> GetByBuildingIdAsync(Guid buildingId);
+        Task<Sensor> AddAsync(Sensor sensor);
+        Task<Sensor> UpdateAsync(Sensor sensor);
+        Task<bool> DeleteAsync(Guid id);
+        Task<List<SensorReading>> GetReadingsAsync(Guid sensorId, DateTime? start = null, DateTime? end = null);
+    }
+
+    /// <summary>
+    /// Sensor reading data
+    /// </summary>
+    public class SensorReading
+    {
+        public Guid Id { get; set; }
+        public Guid SensorId { get; set; }
+        public double Value { get; set; }
+        public string Unit { get; set; }
+        public DateTime Timestamp { get; set; }
+        public Dictionary<string, object> Metadata { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Data collection service interface
+    /// </summary>
+    public interface IDataCollectionService
+    {
+        Task<List<SensorReading>> CollectReadingsAsync(Guid buildingId);
+        Task<SensorReading> GetLatestReadingAsync(Guid sensorId);
+        Task<bool> StartCollectionAsync(Guid buildingId);
+        Task<bool> StopCollectionAsync(Guid buildingId);
     }
 }
