@@ -1,0 +1,59 @@
+# Use Alpine Linux as base image
+FROM alpine:3.18
+
+# Install required packages
+RUN apk add --no-cache \
+    curl \
+    wget \
+    unzip \
+    python3 \
+    py3-pip \
+    git \
+    bash \
+    nodejs \
+    npm \
+    postgresql-client \
+    redis-cli
+
+# Install AWS CLI
+RUN pip3 install --no-cache awscli
+
+# Install Docker CLI
+RUN curl -fsSL https://get.docker.com | sh
+
+# Install kubectl
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
+    chmod +x kubectl && \
+    mv kubectl /usr/local/bin/
+
+# Install Helm
+RUN curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 && \
+    chmod 700 get_helm.sh && \
+    ./get_helm.sh
+
+# Install Terraform
+RUN wget https://releases.hashicorp.com/terraform/1.5.7/terraform_1.5.7_linux_amd64.zip && \
+    unzip terraform_1.5.7_linux_amd64.zip && \
+    mv terraform /usr/local/bin/ && \
+    rm terraform_1.5.7_linux_amd64.zip
+
+# Install kustomize
+RUN curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+
+# Set working directory
+WORKDIR /workspace
+
+# Copy configuration files
+COPY scripts/ /scripts/
+COPY config/ /config/
+
+# Make scripts executable
+RUN chmod +x /scripts/*.sh
+
+# Set environment variables
+ENV AWS_REGION=us-west-2
+ENV HELM_CACHE_HOME=/root/.cache/helm
+ENV KUBECONFIG=/root/.kube/config
+
+# Default command
+CMD ["/bin/bash"]

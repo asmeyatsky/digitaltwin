@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  # Development API
+  api-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: digitaltwin-api-dev
+    ports:
+      - "5000:80"
+      - "5001:443"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=development
+      - ASPNETCORE_URLS=http://+:80;https://+:443
+    volumes:
+      - .:/src
+      - ./logs:/app/logs
+    networks:
+      - dev-network
+
+  # Development Database
+  postgres-dev:
+    image: postgres:15-alpine
+    container_name: digitaltwin-postgres-dev
+    environment:
+      - POSTGRES_DB=digitaltwin_dev
+      - POSTGRES_USER=devuser
+      - POSTGRES_PASSWORD=devpass123
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    networks:
+      - dev-network
+
+  # Development Redis
+  redis-dev:
+    image: redis:7-alpine
+    container_name: digitaltwin-redis-dev
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_dev_data:/data
+    networks:
+      - dev-network
+
+  # Test Database
+  postgres-test:
+    image: postgres:15-alpine
+    container_name: digitaltwin-postgres-test
+    environment:
+      - POSTGRES_DB=digitaltwin_test
+      - POSTGRES_USER=testuser
+      - POSTGRES_PASSWORD=testpass123
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    networks:
+      - test-network
+
+volumes:
+  postgres_dev_data:
+  postgres_test_data:
+  redis_dev_data:
+
+networks:
+  dev-network:
+    driver: bridge
+  test-network:
+    driver: bridge
