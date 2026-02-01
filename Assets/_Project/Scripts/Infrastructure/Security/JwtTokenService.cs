@@ -53,30 +53,40 @@ namespace DigitalTwin.Infrastructure.Security
             
             var claims = new Dictionary<string, object>
             {
-                ["sub"] = "digitaltwin",
+                ["sub"] = user.UserId.ToString(),
                 ["name"] = user.Username,
                 ["email"] = user.Email,
-                ["roles"] = string.Join(\", \", roles),
-                ["jti" = tokenId],
-                ["iat"] = iat,
-                ["nbf" = nbf,
-                ["exp"] = issuedAt.AddMinutes(_config.TokenExpirationMinutes).ToString(\"yyyy-MM-ddTHH:mm:ss\")",
-                [\"iss\" = issuedAt.ToUnixTimeSeconds(),
-                [\"sub\"] = \"digitaltwin\"
-            },
+                ["roles"] = string.Join(", ", roles),
+                ["jti"] = tokenId,
+                ["iat"] = ((DateTimeOffset)issuedAt).ToUnixTimeSeconds(),
+                ["nbf"] = ((DateTimeOffset)issuedAt).ToUnixTimeSeconds(),
+                ["exp"] = ((DateTimeOffset)issuedAt.AddMinutes(_config.TokenExpirationMinutes)).ToUnixTimeSeconds(),
+                ["iss"] = _config.Issuer,
                 ["aud"] = _config.Audience
             };
 
-            var key = new byte[_config.SecretKey.Length / 2];
-            Array.Copy(_config.SecretKey, 0, key.Length / 2);
-            Array.Copy(_config.SecretKey, key.Length / 2 + 1);
+            // Validate secret key before use
+            if (!_config.ValidateSecretKey())
+            {
+                throw new InvalidOperationException("JWT SecretKey is not properly configured");
+            }
 
-            var tokenHandler = new JwtSecurityTokenHandler(_config.HashAlgorithm);
-
-            var signingKey = new SigningCredentials(_config.SecretKey);
+            var keyBytes = Encoding.UTF8.GetBytes(_config.SecretKey);
+            var symmetricKey = new SymmetricSecurityKey(keyBytes);
+            
+            var tokenHandler = new JwtSecurityTokenHandler();
+            var signingCredentials = new SigningCredentials(symmetricKey, _config.HashAlgorithm);
             
             var tokenDescriptor = new SecurityTokenDescriptor
             {
+                Subject = new System.Security.Claims.ClaimsIdentity(new[]
+                {
+                    new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, user.UserId.ToString()),
+                    new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, user.Username),
+                    new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Email, user.Email),
+                    new System.Security.Claims.Claim("roles", string.Join(",", roles)),
+                    new System.Security.Claims.Claim("jti", tokenId)
+                }),
                 Issuer = _config.Issuer,
                 Audience = _config.Audience,
                 SigningCredentials = signingKey,

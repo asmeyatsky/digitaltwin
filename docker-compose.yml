@@ -12,12 +12,12 @@ services:
       - "8443:443"
     environment:
       - ASPNETCORE_ENVIRONMENT=production
-      - ConnectionStrings__DefaultConnection=Host=postgres;Database=digitaltwin;Username=dtadmin;Password=dtsecure123!
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=digitaltwin;Username=${DB_USER};Password=${DB_PASSWORD}
       - JwtConfiguration__SecretKey=${JWT_SECRET_KEY}
       - JwtConfiguration__Issuer=DigitalTwin
       - JwtConfiguration__Audience=DigitalTwin
       - JwtConfiguration__ExpiryInMinutes=60
-      - Redis__ConnectionString=redis:6379
+      - Redis__ConnectionString=redis:${REDIS_PORT:-6379},password=${REDIS_PASSWORD}
       - RabbitMQ__ConnectionString=amqp://guest:guest@rabbitmq:5672
       - DeepFace__BaseUrl=http://deepface:8001
     depends_on:
@@ -42,15 +42,15 @@ services:
     image: postgres:15-alpine
     container_name: digitaltwin-postgres
     environment:
-      - POSTGRES_DB=digitaltwin
-      - POSTGRES_USER=dtadmin
-      - POSTGRES_PASSWORD=dtsecure123!
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
       - POSTGRES_INITDB_ARGS=--encoding=UTF-8
+    user: "${DB_UID:-999}:${DB_GID:-999}"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init:/docker-entrypoint-initdb.d
-    ports:
-      - "5432:5432"
+    # Internal service - no host port mapping needed
     networks:
       - digitaltwin-network
     restart: unless-stopped
@@ -64,17 +64,19 @@ services:
   redis:
     image: redis:7-alpine
     container_name: digitaltwin-redis
-    ports:
-      - "6379:6379"
+    # Internal service - no host port mapping needed
+    user: "redis:redis"
     volumes:
       - redis_data:/data
       - ./redis/redis.conf:/usr/local/etc/redis/redis.conf
-    command: redis-server /usr/local/etc/redis/redis.conf
+    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD}
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
     networks:
       - digitaltwin-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -84,11 +86,10 @@ services:
     image: rabbitmq:3-management-alpine
     container_name: digitaltwin-rabbitmq
     environment:
-      - RABBITMQ_DEFAULT_USER=admin
-      - RABBITMQ_DEFAULT_PASS=admin123!
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
       - RABBITMQ_DEFAULT_VHOST=digitaltwin
-    ports:
-      - "5672:5672"
+    # Internal service - management port only for development
       - "15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
@@ -144,7 +145,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin123!
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - grafana_data:/var/lib/grafana
@@ -219,8 +220,8 @@ services:
       - "9000:9000"
       - "9001:9001"
     environment:
-      - MINIO_ROOT_USER=minioadmin
-      - MINIO_ROOT_PASSWORD=minioadmin123!
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
     volumes:
       - minio_data:/data
     command: server /data --console-address ":9001"

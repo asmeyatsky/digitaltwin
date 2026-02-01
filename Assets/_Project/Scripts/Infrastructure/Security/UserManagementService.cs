@@ -201,19 +201,30 @@ namespace DigitalTwin.Infrastructure.Security
                     };
                 }
 
-                // Validate password
-                if (!_securityConfig.IsStrongPassword(request.Password))
+                // Verify password using secure hashing
+                if (!PasswordHasher.VerifyPassword(request.Password, user.Password))
                 {
+                    user.FailedLoginAttempts++;
+                    
+                    // Check for account lockout
+                    if (user.FailedLoginAttempts >= _securityConfig.MaxFailedAttempts)
+                    {
+                        user.LockoutUntil = DateTime.UtcNow.Add(_securityConfig.LockoutDuration);
+                        LogSecurityEvent("AUTH", "ACCOUNT_LOCKED", $"User {user.Username} locked due to too many failed attempts");
+                    }
+                    
                     return new AuthenticationResult
+                    {
                         IsSuccess = false,
-                        Message = "Password does not meet security requirements",
+                        Message = "Invalid username or password",
                         User = null,
                         Token = null
                     };
                 }
 
-                // Update login attempt count
-                user.FailedLoginAttempts++;
+                // Reset failed attempts on successful password verification
+                user.FailedLoginAttempts = 0;
+                user.LockoutUntil = null;
 
                 // Check for account lockout
                 if (user.LockoutUntil.HasValue && user.LockoutUntil > DateTime.UtcNow)
@@ -464,11 +475,8 @@ namespace DigitalTwin.Infrastructure.Security
 
         private string HashPassword(string password)
         {
-            // In production, use proper password hashing
-            using (var hmac = new System.Security.Cryptography.HMACSHA256(_config.SecretKey))
-            {
-                return BitConverter.ToString(hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(password)));
-            }
+            // Use secure PBKDF2 password hashing
+            return PasswordHasher.HashPassword(password);
         }
 
         private async Task SaveUserAsync(User user)

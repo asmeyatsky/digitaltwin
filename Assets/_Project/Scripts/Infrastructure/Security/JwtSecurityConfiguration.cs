@@ -24,7 +24,7 @@ namespace DigitalTwin.Infrastructure.Security
     public class JwtSecurityConfiguration
     {
         [Header("JWT Settings")]
-        [SerializeField] public string SecretKey = "your-256-bit-secret-key-here";
+        [SerializeField] public string SecretKey = ""; // Must be set from environment variable
         [SerializeField] public string Issuer = "DigitalTwin";
         [SerializeField] public string Audience = "DigitalTwin-API";
         [SerializeField] public string HashAlgorithm = "HS256";
@@ -67,30 +67,58 @@ namespace DigitalTwin.Infrastructure.Security
         [SerializeField] public string SCADAComplianceLevel = "Level 2";
 
         // Validation helpers
-        public bool IsProduction => Application.platform == RuntimePlatform || 
-                               Application.isEditor == false && 
-                               Debug.isDebugBuild == false;
+        public bool IsProduction => Application.platform == RuntimePlatform.WindowsPlayer || 
+                               Application.platform == RuntimePlatform.LinuxPlayer ||
+                               Application.platform == RuntimePlatform.OSXPlayer ||
+                               (Application.isEditor == false && Debug.isDebugBuild == false);
         
         public bool RequireHttps => _requireHttps;
         
-        // Password strength checking
+        // Validate secret key at runtime
+        public bool ValidateSecretKey()
+        {
+            if (string.IsNullOrEmpty(SecretKey))
+            {
+                Debug.LogError("JWT SecretKey is not configured. Set JWT_SECRET_KEY environment variable.");
+                return false;
+            }
+            
+            if (SecretKey.Length < 32)
+            {
+                Debug.LogError("JWT SecretKey must be at least 32 characters long for HS256.");
+                return false;
+            }
+            
+            return true;
+        }
+        
+        // Password strength checking - improved implementation
         public bool IsStrongPassword(string password)
         {
             if (string.IsNullOrEmpty(password)) return false;
             
-            var hasUpper = password.Any(char => char.IsUpper(password));
-            var hasLower = password.Any(char => char.IsLower(password));
-            var hasDigit = password.Any(char => char.IsDigit(password));
+            // Require minimum length
+            if (password.Length < MinPasswordLength) return false;
+            
+            var hasUpper = password.Any(char.IsUpper);
+            var hasLower = password.Any(char.IsLower);
+            var hasDigit = password.Any(char.IsDigit);
             var hasSpecial = password.Any(c => !char.IsLetterOrDigit(c));
             
+            // Enhanced scoring system
             var score = 0;
-            if (password.Length >= 8) score += 1;
+            if (password.Length >= 12) score += 2;
+            else if (password.Length >= 8) score += 1;
             if (hasUpper) score += 1;
             if (hasLower) score += 1;
             if (hasDigit) score += 1;
             if (hasSpecial) score += 2;
             
-            return score >= 3; // Minimum strength requirement
+            // Additional checks
+            if (!password.Contains(" ")) score += 1; // No spaces
+            if (password.Distinct().Count() >= password.Length / 2) score += 1; // Character diversity
+            
+            return score >= 4; // Higher strength requirement
         }
     }
 }

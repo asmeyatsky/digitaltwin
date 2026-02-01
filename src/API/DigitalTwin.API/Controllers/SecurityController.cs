@@ -7,6 +7,8 @@ using DigitalTwin.Core.Security;
 using DigitalTwin.Core.DTOs;
 using DigitalTwin.Core.Enums;
 using DigitalTwin.Infrastructure.Attributes;
+using DigitalTwin.Infrastructure.Filters;
+using System.Security.Claims;
 
 namespace DigitalTwin.API.Controllers
 {
@@ -37,7 +39,10 @@ namespace DigitalTwin.API.Controllers
         /// </summary>
         [HttpPost("register")]
         [AllowAnonymous]
-        public async Task<ActionResult<UserDTO>> RegisterUser([FromBody] RegisterUserRequest request)
+        [ValidateModelAttribute]
+        [SqlInjectionProtection]
+        [XssProtection]
+        public async Task<ActionResult<UserDTO>> RegisterUser([FromBody] Core.DTOs.RegisterUserRequest request)
         {
             try
             {
@@ -59,7 +64,10 @@ namespace DigitalTwin.API.Controllers
         /// </summary>
         [HttpPost("login")]
         [AllowAnonymous]
-        public async Task<ActionResult<LoginResponse>> Login([FromBody] LoginRequest request)
+        [ValidateModelAttribute]
+        [SqlInjectionProtection]
+        [XssProtection]
+        public async Task<ActionResult<LoginResponse>> Login([FromBody] Core.DTOs.LoginRequest request)
         {
             try
             {
@@ -147,18 +155,40 @@ namespace DigitalTwin.API.Controllers
         }
 
         /// <summary>
-        /// Get current user information
+        /// Get current user profile
         /// </summary>
-        [HttpGet("me")]
+        [HttpGet("profile")]
+        [AuthorizeUserOwnership]
         public async Task<ActionResult<UserDTO>> GetCurrentUser()
         {
             try
             {
-                var userId = User.GetUserId();
+                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userId))
                 {
-                    return Unauthorized();
+                    return Unauthorized(new { error = "User not authenticated" });
                 }
+
+                // In a real implementation, this would get user from user service
+                // For now, return a mock user
+                var user = new UserDTO
+                {
+                    Id = userId,
+                    Email = "user@example.com",
+                    FirstName = "User",
+                    LastName = "Name",
+                    Role = UserRole.Viewer,
+                    IsActive = true,
+                    LastLoginAt = DateTime.UtcNow
+                };
+
+                return Ok(user);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = "Internal server error" });
+            }
+        }
 
                 // In a real implementation, this would get user from user service
                 // For now, return a mock user
