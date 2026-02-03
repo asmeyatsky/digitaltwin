@@ -194,6 +194,7 @@ namespace DigitalTwin.Core.Entities
     public class Floor
     {
         public Guid Id { get; set; }
+        public Guid BuildingId { get; set; }
         public int Number { get; set; }
         public string Name { get; set; }
         public double Area { get; set; }
@@ -206,6 +207,7 @@ namespace DigitalTwin.Core.Entities
     public class Room
     {
         public Guid Id { get; set; }
+        public Guid FloorId { get; set; }
         public string Name { get; set; }
         public string Type { get; set; }
         public double Size { get; set; }
@@ -220,6 +222,7 @@ namespace DigitalTwin.Core.Entities
     public class Equipment
     {
         public Guid Id { get; set; }
+        public Guid RoomId { get; set; }
         public string Name { get; set; }
         public string Type { get; set; }
         public string Status { get; set; }
@@ -233,6 +236,7 @@ namespace DigitalTwin.Core.Entities
     public class Sensor
     {
         public Guid Id { get; set; }
+        public Guid RoomId { get; set; }
         public string Name { get; set; }
         public SensorType Type { get; set; }
         public string Status { get; set; }

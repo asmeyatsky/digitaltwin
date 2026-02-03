@@ -458,7 +458,12 @@ Always respond in a way that reflects your learned personality and the current e
 
         private string GetPersonalityDescription(AITwinPersonalityTraits traits)
         {
-            return $"Friendly ({traits.Friendliness:F1}) and empathetic ({traits.Empathy:F1}) professional building assistant with strong analytical skills ({traits.AnalyticalThinking:F1}). {traits.Curiosity:F1 > 0.5 ? "Highly curious" : "Moderately curious"} and {traits.Creativity:F1 > 0.5 ? "creative" : "structured"} approach to problem-solving. {traits.Humor:F1 > 0.5 ? "Uses appropriate humor" : "Serious and focused"}. {traits.Adaptability:F1 > 0.5 ? "Highly adaptable" : "Consistent"} communication style.";
+            var curiousText = traits.Curiosity > 0.5 ? "Highly curious" : "Moderately curious";
+            var creativeText = traits.Creativity > 0.5 ? "creative" : "structured";
+            var humorText = traits.Humor > 0.5 ? "Uses appropriate humor" : "Serious and focused";
+            var adaptableText = traits.Adaptability > 0.5 ? "Highly adaptable" : "Consistent";
+            
+            return $"Friendly ({traits.Friendliness:F1}) and empathetic ({traits.Empathy:F1}) professional building assistant with strong analytical skills ({traits.AnalyticalThinking:F1}). {curiousText} and {creativeText} approach to problem-solving. {humorText}. {adaptableText} communication style.";
         }
 
         private double CalculateDynamicTemperature(AITwinProfile profile)

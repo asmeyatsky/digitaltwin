@@ -586,7 +586,8 @@ namespace DigitalTwin.Core.Services
                     return DateTime.UtcNow.Date.AddDays(1).AddHours(schedule.Hour).AddMinutes(schedule.Minute);
                 
                 case ScheduleFrequency.Weekly:
-                    var nextWeek = now.AddDays((int)schedule.DayOfWeek - (int)now.DayOfWeek + 7) % 7);
+                    var daysUntilNextWeek = ((int)schedule.DayOfWeek - (int)now.DayOfWeek + 7) % 7;
+                    var nextWeek = now.AddDays(daysUntilNextWeek);
                     return nextWeek.Date.AddHours(schedule.Hour).AddMinutes(schedule.Minute);
                 
                 case ScheduleFrequency.Monthly:

@@ -1,0 +1,6 @@
+/Users/allansmeyatsky/digitaltwin/src/Core/DigitalTwin.Core/obj/Debug/net8.0/DigitalTwin.Core.csproj.AssemblyReference.cache
+/Users/allansmeyatsky/digitaltwin/src/Core/DigitalTwin.Core/obj/Debug/net8.0/DigitalTwin.Core.GeneratedMSBuildEditorConfig.editorconfig
+/Users/allansmeyatsky/digitaltwin/src/Core/DigitalTwin.Core/obj/Debug/net8.0/DigitalTwin.Core.AssemblyInfoInputs.cache
+/Users/allansmeyatsky/digitaltwin/src/Core/DigitalTwin.Core/obj/Debug/net8.0/DigitalTwin.Core.AssemblyInfo.cs
+/Users/allansmeyatsky/digitaltwin/src/Core/DigitalTwin.Core/obj/Debug/net8.0/DigitalTwin.Core.csproj.CoreCompileInputs.cache
+/Users/allansmeyatsky/digitaltwin/src/Core/DigitalTwin.Core/obj/Debug/net8.0/DigitalTwin.Core.sourcelink.json
