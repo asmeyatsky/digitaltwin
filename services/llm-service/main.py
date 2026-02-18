@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 import os
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 from pydantic import BaseModel
@@ -75,12 +75,17 @@ EMOTION_RESPONSE_TEMPLATES = {
     },
 }
 
+SERVICE_API_KEY = os.getenv("SERVICE_API_KEY", "")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler for startup/shutdown"""
     # Startup
     logger.info("Starting LLM service...")
+
+    if not SERVICE_API_KEY:
+        logger.warning("SERVICE_API_KEY is not set — all non-health endpoints will return 503")
 
     # Initialize OpenAI client
     openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -106,27 +111,26 @@ limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-SERVICE_API_KEY = os.getenv("SERVICE_API_KEY", "")
-
 
 @app.middleware("http")
 async def verify_api_key(request, call_next):
     if request.url.path == "/health":
         return await call_next(request)
-    if SERVICE_API_KEY:
-        api_key = request.headers.get("X-Service-Key")
-        if api_key != SERVICE_API_KEY:
-            return JSONResponse(status_code=401, content={"error": "Invalid API key"})
+    if not SERVICE_API_KEY:
+        return JSONResponse(status_code=503, content={"error": "Service not configured"})
+    api_key = request.headers.get("X-Service-Key")
+    if api_key != SERVICE_API_KEY:
+        return JSONResponse(status_code=401, content={"error": "Invalid API key"})
     return await call_next(request)
 
 
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:8080").split(","),
+    allow_origins=[o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:8080").split(",")],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "Authorization", "X-Service-Key"],
 )
 
 
@@ -239,7 +243,8 @@ def generate_mock_response(message: str, emotion: str) -> str:
 
 
 @app.post("/generate-response", response_model=LLMResponse)
-async def generate_response(request: LLMRequest):
+@limiter.limit("60/minute")
+async def generate_response(request: Request, llm_request: LLMRequest):
     """
     Generate empathetic AI response based on user's emotional state
 
@@ -247,36 +252,36 @@ async def generate_response(request: LLMRequest):
     tailored to the detected emotion and conversation history.
 
     Args:
-        request: LLM request with message, emotion, and context
+        llm_request: LLM request with message, emotion, and context
 
     Returns:
         LLMResponse with empathetic response and metadata
     """
     try:
-        logger.info(f"Generating response for emotion: {request.emotion}")
+        logger.info(f"Generating response for emotion: {llm_request.emotion}")
 
         # Build conversation context
-        context = build_conversation_context(request.conversation_history)
+        context = build_conversation_context(llm_request.conversation_history)
 
         # Generate response
         if os.getenv("OPENAI_API_KEY"):
             response_text = await generate_with_openai(
-                request.message, request.emotion, context
+                llm_request.message, llm_request.emotion, context
             )
             confidence = 0.9
             response_type = "ai_generated"
         else:
-            response_text = generate_mock_response(request.message, request.emotion)
+            response_text = generate_mock_response(llm_request.message, llm_request.emotion)
             confidence = 0.6
             response_type = "mock_response"
 
         # Determine response emotion (usually empathetic/calm/supportive)
         response_emotion = "empathetic"
-        if request.emotion in ["happy", "excited"]:
+        if llm_request.emotion in ["happy", "excited"]:
             response_emotion = "happy"
-        elif request.emotion in ["sad", "angry"]:
+        elif llm_request.emotion in ["sad", "angry"]:
             response_emotion = "supportive"
-        elif request.emotion in ["anxious", "worried"]:
+        elif llm_request.emotion in ["anxious", "worried"]:
             response_emotion = "calming"
 
         return LLMResponse(
@@ -295,20 +300,21 @@ async def generate_response(request: LLMRequest):
 
 
 @app.post("/analyze-message")
-async def analyze_message(request: dict):
+@limiter.limit("60/minute")
+async def analyze_message(request: Request, body: dict):
     """
     Analyze message content for emotional context and metadata
 
     Provides deeper analysis of user messages to inform better responses.
 
     Args:
-        request: Dictionary containing 'message' field
+        body: Dictionary containing 'message' field
 
     Returns:
         Dictionary with emotional analysis and metadata
     """
     try:
-        message = request.get("message", "")
+        message = body.get("message", "")
         if not message:
             return {"error": "No message provided"}
 

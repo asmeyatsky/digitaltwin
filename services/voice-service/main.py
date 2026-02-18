@@ -12,7 +12,7 @@ from typing import Optional
 from contextlib import asynccontextmanager
 
 import httpx
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, BackgroundTasks
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from starlette.responses import JSONResponse
@@ -37,11 +37,47 @@ os.makedirs(VOICE_STORAGE_PATH, exist_ok=True)
 user_voices = {}  # user_id -> voice_id mapping
 voice_cloning_jobs = {}
 
+# File upload validation constants
+ALLOWED_AUDIO_EXTENSIONS = {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac", ".wma", ".webm"}
+ALLOWED_AUDIO_MIMES = {
+    "audio/mpeg", "audio/wav", "audio/x-wav", "audio/ogg", "audio/flac",
+    "audio/mp4", "audio/aac", "audio/x-m4a", "audio/webm",
+}
+MAX_AUDIO_SIZE = 50 * 1024 * 1024  # 50MB
+
+
+async def validate_audio_upload(file: UploadFile) -> bytes:
+    """Validate and read an audio upload. Returns file contents."""
+    # Check extension
+    filename = (file.filename or "").lower()
+    ext = os.path.splitext(filename)[1]
+    if ext and ext not in ALLOWED_AUDIO_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"Invalid file extension: {ext}. Allowed: {ALLOWED_AUDIO_EXTENSIONS}")
+
+    # Check MIME type
+    content_type = (file.content_type or "").lower()
+    if content_type and content_type not in ALLOWED_AUDIO_MIMES:
+        raise HTTPException(status_code=400, detail=f"Invalid content type: {content_type}. Allowed: {ALLOWED_AUDIO_MIMES}")
+
+    # Read with size limit
+    contents = await file.read()
+    if len(contents) > MAX_AUDIO_SIZE:
+        raise HTTPException(status_code=400, detail=f"File too large: {len(contents)} bytes. Maximum: {MAX_AUDIO_SIZE} bytes")
+
+    return contents
+
+
+SERVICE_API_KEY = os.getenv("SERVICE_API_KEY", "")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler"""
     logger.info("Starting Voice Service...")
+
+    if not SERVICE_API_KEY:
+        logger.warning("SERVICE_API_KEY is not set — all non-health endpoints will return 503")
+
     if not ELEVENLABS_API_KEY:
         logger.warning("ELEVENLABS_API_KEY not set - voice features will be limited")
     yield
@@ -59,26 +95,25 @@ limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-SERVICE_API_KEY = os.getenv("SERVICE_API_KEY", "")
-
 
 @app.middleware("http")
 async def verify_api_key(request, call_next):
     if request.url.path == "/health":
         return await call_next(request)
-    if SERVICE_API_KEY:
-        api_key = request.headers.get("X-Service-Key")
-        if api_key != SERVICE_API_KEY:
-            return JSONResponse(status_code=401, content={"error": "Invalid API key"})
+    if not SERVICE_API_KEY:
+        return JSONResponse(status_code=503, content={"error": "Service not configured"})
+    api_key = request.headers.get("X-Service-Key")
+    if api_key != SERVICE_API_KEY:
+        return JSONResponse(status_code=401, content={"error": "Invalid API key"})
     return await call_next(request)
 
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:8080").split(","),
+    allow_origins=[o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:8080").split(",")],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Content-Type", "Authorization", "X-Service-Key"],
 )
 
 
@@ -158,7 +193,8 @@ async def health_check():
 
 
 @app.get("/voices", response_model=list[VoiceInfo])
-async def list_voices():
+@limiter.limit("60/minute")
+async def list_voices(request: Request):
     """List all available voices from ElevenLabs"""
     if not ELEVENLABS_API_KEY:
         # Return default voice list without API
@@ -194,7 +230,8 @@ async def list_voices():
 
 
 @app.post("/tts")
-async def text_to_speech(request: TTSRequest):
+@limiter.limit("60/minute")
+async def text_to_speech(request: Request, tts_request: TTSRequest):
     """
     Convert text to speech using ElevenLabs.
 
@@ -204,10 +241,10 @@ async def text_to_speech(request: TTSRequest):
         raise HTTPException(status_code=503, detail="ElevenLabs API key not configured")
 
     # Determine voice to use
-    voice_id = request.voice_id
-    if not voice_id and request.user_id:
+    voice_id = tts_request.voice_id
+    if not voice_id and tts_request.user_id:
         # Check if user has a cloned voice
-        voice_id = user_voices.get(request.user_id)
+        voice_id = user_voices.get(tts_request.user_id)
     if not voice_id:
         voice_id = DEFAULT_VOICES["neutral"]
 
@@ -217,13 +254,13 @@ async def text_to_speech(request: TTSRequest):
                 f"{ELEVENLABS_BASE_URL}/text-to-speech/{voice_id}",
                 headers=get_headers(),
                 json={
-                    "text": request.text,
-                    "model_id": request.model_id,
+                    "text": tts_request.text,
+                    "model_id": tts_request.model_id,
                     "voice_settings": {
-                        "stability": request.stability,
-                        "similarity_boost": request.similarity_boost,
-                        "style": request.style,
-                        "use_speaker_boost": request.use_speaker_boost
+                        "stability": tts_request.stability,
+                        "similarity_boost": tts_request.similarity_boost,
+                        "style": tts_request.style,
+                        "use_speaker_boost": tts_request.use_speaker_boost
                     }
                 },
                 timeout=60.0
@@ -243,7 +280,8 @@ async def text_to_speech(request: TTSRequest):
 
 
 @app.post("/tts/with-visemes")
-async def text_to_speech_with_visemes(request: TTSRequest):
+@limiter.limit("30/minute")
+async def text_to_speech_with_visemes(request: Request, tts_request: TTSRequest):
     """
     Convert text to speech and return viseme data for lip sync.
 
@@ -252,9 +290,9 @@ async def text_to_speech_with_visemes(request: TTSRequest):
     if not ELEVENLABS_API_KEY:
         raise HTTPException(status_code=503, detail="ElevenLabs API key not configured")
 
-    voice_id = request.voice_id
-    if not voice_id and request.user_id:
-        voice_id = user_voices.get(request.user_id)
+    voice_id = tts_request.voice_id
+    if not voice_id and tts_request.user_id:
+        voice_id = user_voices.get(tts_request.user_id)
     if not voice_id:
         voice_id = DEFAULT_VOICES["neutral"]
 
@@ -265,13 +303,13 @@ async def text_to_speech_with_visemes(request: TTSRequest):
                 f"{ELEVENLABS_BASE_URL}/text-to-speech/{voice_id}/with-timestamps",
                 headers=get_headers(),
                 json={
-                    "text": request.text,
-                    "model_id": request.model_id,
+                    "text": tts_request.text,
+                    "model_id": tts_request.model_id,
                     "voice_settings": {
-                        "stability": request.stability,
-                        "similarity_boost": request.similarity_boost,
-                        "style": request.style,
-                        "use_speaker_boost": request.use_speaker_boost
+                        "stability": tts_request.stability,
+                        "similarity_boost": tts_request.similarity_boost,
+                        "style": tts_request.style,
+                        "use_speaker_boost": tts_request.use_speaker_boost
                     }
                 },
                 timeout=60.0
@@ -284,7 +322,7 @@ async def text_to_speech_with_visemes(request: TTSRequest):
             alignment = data.get("alignment", {})
 
             # Generate viseme data from alignment
-            visemes = generate_visemes_from_alignment(alignment, request.text)
+            visemes = generate_visemes_from_alignment(alignment, tts_request.text)
 
             # Save audio temporarily
             audio_id = str(uuid.uuid4())
@@ -299,7 +337,7 @@ async def text_to_speech_with_visemes(request: TTSRequest):
                 "audio_url": f"/audio/{audio_id}",
                 "visemes": visemes,
                 "duration_ms": calculate_audio_duration(alignment),
-                "text": request.text
+                "text": tts_request.text
             }
 
     except httpx.HTTPError as e:
@@ -313,11 +351,11 @@ async def text_to_speech_with_visemes(request: TTSRequest):
                     f"{ELEVENLABS_BASE_URL}/text-to-speech/{voice_id}",
                     headers=get_headers(),
                     json={
-                        "text": request.text,
-                        "model_id": request.model_id,
+                        "text": tts_request.text,
+                        "model_id": tts_request.model_id,
                         "voice_settings": {
-                            "stability": request.stability,
-                            "similarity_boost": request.similarity_boost
+                            "stability": tts_request.stability,
+                            "similarity_boost": tts_request.similarity_boost
                         }
                     },
                     timeout=60.0
@@ -331,13 +369,13 @@ async def text_to_speech_with_visemes(request: TTSRequest):
                     f.write(response.content)
 
                 # Generate estimated visemes
-                visemes = generate_estimated_visemes(request.text)
+                visemes = generate_estimated_visemes(tts_request.text)
 
                 return {
                     "audio_url": f"/audio/{audio_id}",
                     "visemes": visemes,
-                    "duration_ms": estimate_speech_duration(request.text),
-                    "text": request.text
+                    "duration_ms": estimate_speech_duration(tts_request.text),
+                    "text": tts_request.text
                 }
 
         except Exception as fallback_error:
@@ -346,7 +384,8 @@ async def text_to_speech_with_visemes(request: TTSRequest):
 
 
 @app.get("/audio/{audio_id}")
-async def get_audio(audio_id: str):
+@limiter.limit("60/minute")
+async def get_audio(request: Request, audio_id: str):
     """Download generated audio file"""
     audio_path = os.path.join(VOICE_STORAGE_PATH, f"{audio_id}.mp3")
     if not os.path.exists(audio_path):
@@ -360,7 +399,9 @@ async def get_audio(audio_id: str):
 
 
 @app.post("/voice/clone", response_model=VoiceCloneStatus)
+@limiter.limit("5/minute")
 async def clone_voice(
+    request: Request,
     user_id: str = Form(...),
     voice_name: str = Form(...),
     description: str = Form(None),
@@ -388,10 +429,10 @@ async def clone_voice(
     }
 
     try:
-        # Prepare files for upload
+        # Validate and prepare files for upload
         files_data = []
         for file in files:
-            content = await file.read()
+            content = await validate_audio_upload(file)
             files_data.append(("files", (file.filename, content, file.content_type)))
 
         # Add voice clone to ElevenLabs
@@ -435,7 +476,8 @@ async def clone_voice(
 
 
 @app.get("/voice/clone/{job_id}/status", response_model=VoiceCloneStatus)
-async def get_clone_status(job_id: str):
+@limiter.limit("60/minute")
+async def get_clone_status(request: Request, job_id: str):
     """Get voice cloning job status"""
     if job_id not in voice_cloning_jobs:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -451,7 +493,8 @@ async def get_clone_status(job_id: str):
 
 
 @app.get("/voice/user/{user_id}")
-async def get_user_voice(user_id: str):
+@limiter.limit("60/minute")
+async def get_user_voice(request: Request, user_id: str):
     """Get the voice ID associated with a user"""
     voice_id = user_voices.get(user_id)
     if not voice_id:
@@ -461,7 +504,8 @@ async def get_user_voice(user_id: str):
 
 
 @app.delete("/voice/user/{user_id}")
-async def delete_user_voice(user_id: str):
+@limiter.limit("30/minute")
+async def delete_user_voice(request: Request, user_id: str):
     """Delete a user's cloned voice"""
     voice_id = user_voices.get(user_id)
     if not voice_id:

@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 import numpy as np
 import PIL
 from PIL import Image
-from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks
+from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from starlette.responses import JSONResponse
@@ -43,6 +43,32 @@ Path(TEMP_PATH).mkdir(parents=True, exist_ok=True)
 face_mesh = None
 face_detector = None
 
+# File upload validation constants
+ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".gif"}
+ALLOWED_IMAGE_MIMES = {"image/jpeg", "image/png", "image/bmp", "image/webp", "image/gif"}
+MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
+
+
+async def validate_image_upload(file: UploadFile) -> bytes:
+    """Validate and read an image upload. Returns file contents."""
+    # Check extension
+    filename = (file.filename or "").lower()
+    ext = os.path.splitext(filename)[1]
+    if ext and ext not in ALLOWED_IMAGE_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"Invalid file extension: {ext}. Allowed: {ALLOWED_IMAGE_EXTENSIONS}")
+
+    # Check MIME type
+    content_type = (file.content_type or "").lower()
+    if content_type and content_type not in ALLOWED_IMAGE_MIMES:
+        raise HTTPException(status_code=400, detail=f"Invalid content type: {content_type}. Allowed: {ALLOWED_IMAGE_MIMES}")
+
+    # Read with size limit
+    contents = await file.read()
+    if len(contents) > MAX_IMAGE_SIZE:
+        raise HTTPException(status_code=400, detail=f"File too large: {len(contents)} bytes. Maximum: {MAX_IMAGE_SIZE} bytes")
+
+    return contents
+
 
 def get_mediapipe():
     """Lazy load MediaPipe for face mesh extraction"""
@@ -65,10 +91,17 @@ def get_mediapipe():
     return face_mesh, face_detector
 
 
+SERVICE_API_KEY = os.getenv("SERVICE_API_KEY", "")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler"""
     logger.info("Starting Avatar Generation Service...")
+
+    if not SERVICE_API_KEY:
+        logger.warning("SERVICE_API_KEY is not set — all non-health endpoints will return 503")
+
     # Pre-load models
     try:
         get_mediapipe()
@@ -90,26 +123,25 @@ limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-SERVICE_API_KEY = os.getenv("SERVICE_API_KEY", "")
-
 
 @app.middleware("http")
 async def verify_api_key(request, call_next):
     if request.url.path == "/health":
         return await call_next(request)
-    if SERVICE_API_KEY:
-        api_key = request.headers.get("X-Service-Key")
-        if api_key != SERVICE_API_KEY:
-            return JSONResponse(status_code=401, content={"error": "Invalid API key"})
+    if not SERVICE_API_KEY:
+        return JSONResponse(status_code=503, content={"error": "Service not configured"})
+    api_key = request.headers.get("X-Service-Key")
+    if api_key != SERVICE_API_KEY:
+        return JSONResponse(status_code=401, content={"error": "Invalid API key"})
     return await call_next(request)
 
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:8080").split(","),
+    allow_origins=[o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:8080").split(",")],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Content-Type", "Authorization", "X-Service-Key"],
 )
 
 
@@ -178,7 +210,9 @@ async def health_check():
 
 
 @app.post("/avatar/generate", response_model=AvatarGenerationResponse)
+@limiter.limit("10/minute")
 async def generate_avatar(
+    request: Request,
     file: UploadFile = File(...),
     user_id: str = "anonymous",
     avatar_style: str = "realistic",
@@ -199,7 +233,7 @@ async def generate_avatar(
 
     try:
         # Read and validate image
-        contents = await file.read()
+        contents = await validate_image_upload(file)
         image = Image.open(io.BytesIO(contents))
 
         # Convert to RGB
@@ -283,13 +317,14 @@ async def generate_avatar(
 
 
 @app.post("/avatar/extract-landmarks", response_model=FaceLandmarks)
-async def extract_landmarks(file: UploadFile = File(...)):
+@limiter.limit("30/minute")
+async def extract_landmarks(request: Request, file: UploadFile = File(...)):
     """
     Extract facial landmarks from an image without generating full avatar.
     Useful for real-time face tracking and expression mapping.
     """
     try:
-        contents = await file.read()
+        contents = await validate_image_upload(file)
         image = Image.open(io.BytesIO(contents))
 
         if image.mode != 'RGB':
@@ -366,7 +401,8 @@ async def extract_landmarks(file: UploadFile = File(...)):
 
 
 @app.get("/avatar/{avatar_id}/status", response_model=AvatarStatus)
-async def get_avatar_status(avatar_id: str):
+@limiter.limit("60/minute")
+async def get_avatar_status(request: Request, avatar_id: str):
     """Get the status of an avatar generation job"""
     if avatar_id not in avatar_jobs:
         raise HTTPException(status_code=404, detail="Avatar not found")
@@ -381,7 +417,8 @@ async def get_avatar_status(avatar_id: str):
 
 
 @app.get("/avatar/{avatar_id}/download")
-async def download_avatar(avatar_id: str):
+@limiter.limit("60/minute")
+async def download_avatar(request: Request, avatar_id: str):
     """Download the generated avatar GLB file"""
     if avatar_id not in avatar_jobs:
         raise HTTPException(status_code=404, detail="Avatar not found")
@@ -402,7 +439,8 @@ async def download_avatar(avatar_id: str):
 
 
 @app.get("/avatar/{avatar_id}/thumbnail")
-async def get_avatar_thumbnail(avatar_id: str):
+@limiter.limit("60/minute")
+async def get_avatar_thumbnail(request: Request, avatar_id: str):
     """Get avatar thumbnail image"""
     if avatar_id not in avatar_jobs:
         raise HTTPException(status_code=404, detail="Avatar not found")
@@ -417,7 +455,8 @@ async def get_avatar_thumbnail(avatar_id: str):
 
 
 @app.get("/avatar/{avatar_id}/texture")
-async def get_avatar_texture(avatar_id: str):
+@limiter.limit("60/minute")
+async def get_avatar_texture(request: Request, avatar_id: str):
     """Get avatar face texture"""
     if avatar_id not in avatar_jobs:
         raise HTTPException(status_code=404, detail="Avatar not found")
@@ -432,7 +471,8 @@ async def get_avatar_texture(avatar_id: str):
 
 
 @app.delete("/avatar/{avatar_id}")
-async def delete_avatar(avatar_id: str):
+@limiter.limit("30/minute")
+async def delete_avatar(request: Request, avatar_id: str):
     """Delete an avatar and its associated files"""
     if avatar_id not in avatar_jobs:
         raise HTTPException(status_code=404, detail="Avatar not found")

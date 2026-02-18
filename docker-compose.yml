@@ -162,7 +162,8 @@ services:
     container_name: digitaltwin-elasticsearch
     environment:
       - discovery.type=single-node
-      - xpack.security.enabled=false
+      - xpack.security.enabled=true
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
     # Internal service - no host port mapping needed
     volumes:
@@ -234,6 +235,8 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - TF_CPP_MIN_LOG_LEVEL=2
+      - SERVICE_API_KEY=${SERVICE_API_KEY}
+      - CORS_ORIGINS=${CORS_ORIGINS}
     networks:
       - digitaltwin-network
     restart: unless-stopped
@@ -261,6 +264,8 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - AVATAR_STORAGE_PATH=/app/avatars
+      - SERVICE_API_KEY=${SERVICE_API_KEY}
+      - CORS_ORIGINS=${CORS_ORIGINS}
     volumes:
       - avatar_data:/app/avatars
     networks:
@@ -291,6 +296,8 @@ services:
       - PYTHONUNBUFFERED=1
       - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
       - VOICE_STORAGE_PATH=/app/voices
+      - SERVICE_API_KEY=${SERVICE_API_KEY}
+      - CORS_ORIGINS=${CORS_ORIGINS}
     volumes:
       - voice_data:/app/voices
     networks:
@@ -314,6 +321,8 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SERVICE_API_KEY=${SERVICE_API_KEY}
+      - CORS_ORIGINS=${CORS_ORIGINS}
     networks:
       - digitaltwin-network
     restart: unless-stopped

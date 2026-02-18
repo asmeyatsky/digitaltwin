@@ -11,13 +11,21 @@ metadata:
   name: digitaltwin-secrets
   namespace: digitaltwin
 type: Opaque
+# Create secrets via kubectl instead of checking values into source control:
+#   kubectl create secret generic digitaltwin-secrets -n digitaltwin \
+#     --from-literal=database-connection='Host=postgres;Database=digitaltwin;Username=dtadmin;Password=YOURPASS' \
+#     --from-literal=jwt-secret='YOUR_JWT_SECRET' \
+#     --from-literal=rabbitmq-connection='amqp://dtadmin:YOURPASS@rabbitmq:5672/digitaltwin' \
+#     --from-literal=postgres-password='YOURPASS' \
+#     --from-literal=rabbitmq-password='YOURPASS' \
+#     --from-literal=redis-password='YOURPASS'
 data:
-  # IMPORTANT: Replace with SealedSecrets or external secret manager values
   database-connection: REPLACE_WITH_SEALED_SECRET
   jwt-secret: REPLACE_WITH_SEALED_SECRET
   rabbitmq-connection: REPLACE_WITH_SEALED_SECRET
   postgres-password: REPLACE_WITH_SEALED_SECRET
   rabbitmq-password: REPLACE_WITH_SEALED_SECRET
+  redis-password: REPLACE_WITH_SEALED_SECRET
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -138,9 +146,17 @@ spec:
           mountPath: /data
         - name: redis-config
           mountPath: /etc/redis
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: digitaltwin-secrets
+              key: redis-password
         command:
         - redis-server
         - /etc/redis/redis.conf
+        - --requirepass
+        - "$(REDIS_PASSWORD)"
         - --appendonly
         - "yes"
       volumes:

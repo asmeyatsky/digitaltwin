@@ -12,7 +12,7 @@ import os
 
 import numpy as np
 import cv2
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 from pydantic import BaseModel
@@ -45,6 +45,32 @@ logger = logging.getLogger(__name__)
 face_cascade = None
 emotion_labels = ["angry", "disgust", "fear", "happy", "sad", "surprise", "neutral"]
 
+# File upload validation constants
+ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".gif"}
+ALLOWED_IMAGE_MIMES = {"image/jpeg", "image/png", "image/bmp", "image/webp", "image/gif"}
+MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
+
+
+async def validate_image_upload(file: UploadFile) -> bytes:
+    """Validate and read an image upload. Returns file contents."""
+    # Check extension
+    filename = (file.filename or "").lower()
+    ext = os.path.splitext(filename)[1]
+    if ext and ext not in ALLOWED_IMAGE_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"Invalid file extension: {ext}. Allowed: {ALLOWED_IMAGE_EXTENSIONS}")
+
+    # Check MIME type
+    content_type = (file.content_type or "").lower()
+    if content_type and content_type not in ALLOWED_IMAGE_MIMES:
+        raise HTTPException(status_code=400, detail=f"Invalid content type: {content_type}. Allowed: {ALLOWED_IMAGE_MIMES}")
+
+    # Read with size limit
+    contents = await file.read()
+    if len(contents) > MAX_IMAGE_SIZE:
+        raise HTTPException(status_code=400, detail=f"File too large: {len(contents)} bytes. Maximum: {MAX_IMAGE_SIZE} bytes")
+
+    return contents
+
 
 def get_models():
     """Load face cascade classifier"""
@@ -74,6 +100,10 @@ async def lifespan(app: FastAPI):
     """Application lifespan handler for startup/shutdown"""
     # Startup: Pre-load models
     logger.info("Starting Emotion Recognition service...")
+
+    if not SERVICE_API_KEY:
+        logger.warning("SERVICE_API_KEY is not set — all non-health endpoints will return 503")
+
     try:
         get_models()
         logger.info("Models pre-loaded successfully")
@@ -104,20 +134,21 @@ SERVICE_API_KEY = os.getenv("SERVICE_API_KEY", "")
 async def verify_api_key(request, call_next):
     if request.url.path == "/health":
         return await call_next(request)
-    if SERVICE_API_KEY:
-        api_key = request.headers.get("X-Service-Key")
-        if api_key != SERVICE_API_KEY:
-            return JSONResponse(status_code=401, content={"error": "Invalid API key"})
+    if not SERVICE_API_KEY:
+        return JSONResponse(status_code=503, content={"error": "Service not configured"})
+    api_key = request.headers.get("X-Service-Key")
+    if api_key != SERVICE_API_KEY:
+        return JSONResponse(status_code=401, content={"error": "Invalid API key"})
     return await call_next(request)
 
 
 # CORS middleware for cross-origin requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:8080").split(","),
+    allow_origins=[o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:8080").split(",")],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "Authorization", "X-Service-Key"],
 )
 
 
@@ -343,7 +374,9 @@ async def health_check():
 
 
 @app.post("/analyze/facial-expression", response_model=FacialExpressionResponse)
+@limiter.limit("30/minute")
 async def analyze_facial_expression(
+    request: Request,
     file: UploadFile = File(...), include_demographics: bool = False
 ):
     """
@@ -358,7 +391,7 @@ async def analyze_facial_expression(
     """
     try:
         # Read and validate image
-        contents = await file.read()
+        contents = await validate_image_upload(file)
         image = Image.open(io.BytesIO(contents))
 
         # Convert to RGB if necessary
@@ -417,13 +450,16 @@ async def analyze_facial_expression(
 
         return response
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error analyzing facial expression: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.post("/analyze/emotion", response_model=EmotionalAnalysisResponse)
-async def analyze_emotion(file: UploadFile = File(...)):
+@limiter.limit("30/minute")
+async def analyze_emotion(request: Request, file: UploadFile = File(...)):
     """
     Comprehensive emotional analysis from facial expression.
 
@@ -438,7 +474,7 @@ async def analyze_emotion(file: UploadFile = File(...)):
     """
     try:
         # Read and validate image
-        contents = await file.read()
+        contents = await validate_image_upload(file)
         image = Image.open(io.BytesIO(contents))
 
         # Convert to RGB if necessary
@@ -474,7 +510,6 @@ async def analyze_emotion(file: UploadFile = File(...)):
         normalized_emotions = emotions
 
         confidence = normalized_emotions.get(dominant_emotion, 0)
-        confidence = normalized_emotions.get(dominant_emotion, 0)
 
         # Calculate intensity (how strong the dominant emotion is)
         max_score = max(normalized_emotions.values()) if normalized_emotions else 0
@@ -497,13 +532,16 @@ async def analyze_emotion(file: UploadFile = File(...)):
             valence_level=valence,
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error in emotional analysis: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.post("/analyze/batch")
-async def analyze_batch(files: list[UploadFile] = File(...)):
+@limiter.limit("10/minute")
+async def analyze_batch(request: Request, files: list[UploadFile] = File(...)):
     """
     Batch analyze multiple images for emotions.
 
@@ -518,7 +556,7 @@ async def analyze_batch(files: list[UploadFile] = File(...)):
         try:
             # Rewind file if needed
             await file.seek(0)
-            result = await analyze_emotion(file)
+            result = await analyze_emotion(request, file)
             results.append({"filename": file.filename, "analysis": result})
         except Exception as e:
             results.append({"filename": file.filename, "error": str(e)})
@@ -527,7 +565,8 @@ async def analyze_batch(files: list[UploadFile] = File(...)):
 
 
 @app.post("/detect-emotion")
-async def detect_emotion_from_text(request: dict):
+@limiter.limit("60/minute")
+async def detect_emotion_from_text(request: Request, body: dict):
     """
     Detect emotion from text input (for conversation API integration)
 
@@ -535,13 +574,13 @@ async def detect_emotion_from_text(request: dict):
     when no facial input is available.
 
     Args:
-        request: Dictionary containing 'text' field
+        body: Dictionary containing 'text' field
 
     Returns:
         Dictionary with detected emotion and confidence
     """
     try:
-        text = request.get("text", "")
+        text = body.get("text", "")
         if not text:
             return {"emotion": "neutral", "confidence": 0.5}
 

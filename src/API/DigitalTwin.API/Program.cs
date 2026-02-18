@@ -56,16 +56,28 @@ namespace DigitalTwin.API
 
             // Database — use standardized env var with fallback
             var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
-                ?? builder.Configuration.GetConnectionString("DefaultConnection")
-                ?? "Host=localhost;Database=digitaltwin;Username=postgres;Password=password";
+                ?? builder.Configuration.GetConnectionString("DefaultConnection");
+            if (string.IsNullOrEmpty(connectionString))
+            {
+                if (builder.Environment.IsDevelopment())
+                    connectionString = "Host=localhost;Database=digitaltwin;Username=postgres;Password=password";
+                else
+                    throw new InvalidOperationException("ConnectionStrings__DefaultConnection must be set in production");
+            }
 
             builder.Services.AddDbContext<DigitalTwinDbContext>(options =>
                 options.UseNpgsql(connectionString));
 
             // JWT Authentication — standardized env vars
             var jwtKey = Environment.GetEnvironmentVariable("JwtConfiguration__SecretKey")
-                ?? builder.Configuration["JwtConfiguration:SecretKey"]
-                ?? "ThisIsASecretKeyForDevelopmentUseOnly123456789012345678901234567890";
+                ?? builder.Configuration["JwtConfiguration:SecretKey"];
+            if (string.IsNullOrEmpty(jwtKey))
+            {
+                if (builder.Environment.IsDevelopment())
+                    jwtKey = "ThisIsASecretKeyForDevelopmentUseOnly123456789012345678901234567890";
+                else
+                    throw new InvalidOperationException("JwtConfiguration__SecretKey must be set in production");
+            }
             var jwtIssuer = Environment.GetEnvironmentVariable("JwtConfiguration__Issuer")
                 ?? builder.Configuration["JwtConfiguration:Issuer"]
                 ?? "DigitalTwin";
@@ -142,8 +154,8 @@ namespace DigitalTwin.API
                 options.AddPolicy("Default", policy =>
                 {
                     policy.WithOrigins(allowedOrigins)
-                          .AllowAnyMethod()
-                          .AllowAnyHeader()
+                          .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                          .WithHeaders("Content-Type", "Authorization", "X-Service-Key")
                           .AllowCredentials();
                 });
             });
