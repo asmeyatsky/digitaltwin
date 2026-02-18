@@ -145,6 +145,13 @@ namespace DigitalTwin.API
             });
             builder.Services.AddHttpClient();
 
+            // Stripe configuration
+            var stripeSecretKey = Environment.GetEnvironmentVariable("Stripe__SecretKey");
+            if (!string.IsNullOrEmpty(stripeSecretKey))
+            {
+                Stripe.StripeConfiguration.ApiKey = stripeSecretKey;
+            }
+
             // Core services
             builder.Services.AddSingleton<API.Services.JwtAuthenticationService>();
             builder.Services.AddScoped<PasswordHasher>();

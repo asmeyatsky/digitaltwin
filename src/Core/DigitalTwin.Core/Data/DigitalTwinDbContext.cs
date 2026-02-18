@@ -43,6 +43,9 @@ namespace DigitalTwin.Core.Data
         // Emotional Entities
         public DbSet<EmotionalMemory> EmotionalMemories { get; set; }
 
+        // Subscription Entities
+        public DbSet<Subscription> Subscriptions { get; set; }
+
         // Security Entities (simplified for now)
         // public DbSet<UserSession> UserSessions { get; set; }
         // public DbSet<SecurityEvent> SecurityEvents { get; set; }
@@ -186,6 +189,20 @@ namespace DigitalTwin.Core.Data
                 entity.Property(e => e.Status).HasMaxLength(50);
                 entity.HasOne<Room>().WithMany(r => r.Sensors).HasForeignKey(e => e.RoomId);
                 entity.HasIndex(e => new { e.RoomId, e.Type });
+            });
+
+            // Configure Subscription
+            modelBuilder.Entity<Subscription>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.UserId).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.Tier).IsRequired().HasMaxLength(20);
+                entity.Property(e => e.Status).IsRequired().HasMaxLength(20);
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => e.UserId).IsUnique();
+                entity.HasIndex(e => e.StripeCustomerId);
+                entity.HasIndex(e => e.StripeSubscriptionId);
             });
 
             // Add indexes for performance
