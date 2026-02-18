@@ -52,6 +52,14 @@ spec:
             secretKeyRef:
               name: digitaltwin-secrets
               key: rabbitmq-connection
+        - name: DeepFace__BaseUrl
+          value: "http://digitaltwin-deepface-service:8001"
+        - name: Services__LLM__BaseUrl
+          value: "http://digitaltwin-llm-service:8004"
+        - name: Services__Avatar__BaseUrl
+          value: "http://digitaltwin-avatar-service:8002"
+        - name: Services__Voice__BaseUrl
+          value: "http://digitaltwin-voice-service:8003"
         resources:
           requests:
             memory: "256Mi"

@@ -2,7 +2,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using DigitalTwin.Core.Data;
+using DigitalTwin.Core.DTOs;
 using DigitalTwin.Core.Entities;
+using DigitalTwin.Core.Enums;
 using System.ComponentModel.DataAnnotations;
 
 namespace DigitalTwin.API.Controllers
@@ -54,7 +56,7 @@ namespace DigitalTwin.API.Controllers
                 var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userId))
                 {
-                    return Unauthorized("User not authenticated");
+                    return Unauthorized(ApiResponse.Fail("User not authenticated"));
                 }
 
                 // Create conversation session with deterministic TwinId per user
@@ -87,18 +89,18 @@ namespace DigitalTwin.API.Controllers
                 _context.AITwinInteractions.Add(interaction);
                 await _context.SaveChangesAsync();
 
-                return Ok(new ConversationStartResponse
+                return Ok(ApiResponse<ConversationStartResponse>.Ok(new ConversationStartResponse
                 {
                     SessionId = sessionId,
                     Response = interaction.Response.Content,
                     EmotionalTone = interaction.Response.EmotionalTone.ToString(),
                     Timestamp = interaction.Response.Timestamp
-                });
+                }));
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error starting conversation");
-                return StatusCode(500, "Internal server error");
+                return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
         }
 
@@ -114,7 +116,7 @@ namespace DigitalTwin.API.Controllers
                 var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userId))
                 {
-                    return Unauthorized("User not authenticated");
+                    return Unauthorized(ApiResponse.Fail("User not authenticated"));
                 }
 
                 // Get detected emotion from DeepFace service (placeholder for now)
@@ -152,19 +154,19 @@ namespace DigitalTwin.API.Controllers
                 _context.AITwinInteractions.Add(interaction);
                 await _context.SaveChangesAsync();
 
-                return Ok(new ConversationMessageResponse
+                return Ok(ApiResponse<ConversationMessageResponse>.Ok(new ConversationMessageResponse
                 {
                     Response = aiResponse,
                     DetectedEmotion = detectedEmotion,
                     AIEmotionalTone = interaction.Response.EmotionalTone.ToString(),
                     ResponseTime = DateTime.UtcNow,
                     ConversationId = request.ConversationId
-                });
+                }));
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error sending message");
-                return StatusCode(500, "Internal server error");
+                return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
         }
 
@@ -182,7 +184,7 @@ namespace DigitalTwin.API.Controllers
                 var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userId))
                 {
-                    return Unauthorized("User not authenticated");
+                    return Unauthorized(ApiResponse.Fail("User not authenticated"));
                 }
 
                 var interactions = await _context.AITwinInteractions
@@ -212,18 +214,18 @@ namespace DigitalTwin.API.Controllers
                                 i.Context["user_id"].ToString() == userId)
                     .CountAsync();
 
-                return Ok(new ConversationHistoryResponse
+                return Ok(ApiResponse<ConversationHistoryResponse>.Ok(new ConversationHistoryResponse
                 {
                     Messages = history,
                     TotalCount = totalCount,
                     Page = page,
                     PageSize = pageSize
-                });
+                }));
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting conversation history");
-                return StatusCode(500, "Internal server error");
+                return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
         }
 
@@ -239,7 +241,7 @@ namespace DigitalTwin.API.Controllers
                 var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userId))
                 {
-                    return Unauthorized("User not authenticated");
+                    return Unauthorized(ApiResponse.Fail("User not authenticated"));
                 }
 
                 // Log conversation end
@@ -263,12 +265,12 @@ namespace DigitalTwin.API.Controllers
                 _context.AITwinInteractions.Add(interaction);
                 await _context.SaveChangesAsync();
 
-                return Ok(new { message = "Conversation ended successfully" });
+                return Ok(ApiResponse.Ok("Conversation ended successfully"));
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error ending conversation");
-                return StatusCode(500, "Internal server error");
+                return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
         }
 
@@ -343,33 +345,22 @@ namespace DigitalTwin.API.Controllers
 
         private EmotionalTone ParseEmotionalTone(string emotion)
         {
-            return emotion.ToLower() switch
-            {
-                "happy" => EmotionalTone.Happy,
-                "excited" => EmotionalTone.Excited,
-                "sad" or "depressed" => EmotionalTone.Sad,
-                "angry" or "frustrated" => EmotionalTone.Frustrated,
-                "anxious" or "worried" => EmotionalTone.Concerned,
-                "curious" => EmotionalTone.Curious,
-                "surprised" or "surprise" => EmotionalTone.Excited,
-                "fear" or "scared" => EmotionalTone.Concerned,
-                "disgust" => EmotionalTone.Frustrated,
-                "calm" or "relaxed" => EmotionalTone.Calm,
-                _ => EmotionalTone.Neutral
-            };
+            return EmotionMapper.ToEmotionalTone(EmotionMapper.FromString(emotion));
         }
 
         private EmotionalTone DetermineResponseEmotion(string userEmotion)
         {
-            return userEmotion.ToLower() switch
+            var canonical = EmotionMapper.FromString(userEmotion);
+            // Choose an empathetic response tone based on what the user is feeling
+            var responseTone = canonical switch
             {
-                "sad" or "depressed" => EmotionalTone.Concerned,
-                "angry" or "frustrated" => EmotionalTone.Calm,
-                "happy" or "excited" => EmotionalTone.Happy,
-                "anxious" or "worried" => EmotionalTone.Calm,
-                "fear" or "scared" => EmotionalTone.Concerned,
-                _ => EmotionalTone.Neutral
+                Emotion.Sad => Emotion.Anxious,       // concerned
+                Emotion.Angry => Emotion.Calm,
+                Emotion.Happy or Emotion.Excited => Emotion.Happy,
+                Emotion.Anxious => Emotion.Calm,
+                _ => Emotion.Neutral
             };
+            return EmotionMapper.ToEmotionalTone(responseTone);
         }
     }
 

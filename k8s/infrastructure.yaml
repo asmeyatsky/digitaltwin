@@ -18,7 +18,10 @@ type: Opaque
 #     --from-literal=rabbitmq-connection='amqp://dtadmin:YOURPASS@rabbitmq:5672/digitaltwin' \
 #     --from-literal=postgres-password='YOURPASS' \
 #     --from-literal=rabbitmq-password='YOURPASS' \
-#     --from-literal=redis-password='YOURPASS'
+#     --from-literal=redis-password='YOURPASS' \
+#     --from-literal=service-api-key='YOUR_SERVICE_API_KEY' \
+#     --from-literal=openai-api-key='YOUR_OPENAI_API_KEY' \
+#     --from-literal=elevenlabs-api-key='YOUR_ELEVENLABS_API_KEY'
 data:
   database-connection: REPLACE_WITH_SEALED_SECRET
   jwt-secret: REPLACE_WITH_SEALED_SECRET
@@ -26,6 +29,9 @@ data:
   postgres-password: REPLACE_WITH_SEALED_SECRET
   rabbitmq-password: REPLACE_WITH_SEALED_SECRET
   redis-password: REPLACE_WITH_SEALED_SECRET
+  service-api-key: REPLACE_WITH_SEALED_SECRET
+  openai-api-key: REPLACE_WITH_SEALED_SECRET
+  elevenlabs-api-key: REPLACE_WITH_SEALED_SECRET
 ---
 apiVersion: apps/v1
 kind: Deployment

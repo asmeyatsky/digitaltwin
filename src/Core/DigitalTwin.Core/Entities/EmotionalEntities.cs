@@ -33,6 +33,7 @@ namespace DigitalTwin.Core.Entities
     /// <summary>
     /// Types of emotions detected
     /// </summary>
+    [Obsolete("Use DigitalTwin.Core.Enums.Emotion enum with EmotionMapper instead.")]
     public enum EmotionType
     {
         Happy,

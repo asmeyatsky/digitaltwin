@@ -45,15 +45,15 @@ namespace DigitalTwin.API.Controllers
             try
             {
                 var user = await _authService.RegisterUserAsync(request);
-                return CreatedAtAction(nameof(GetUser), new { id = user.Id }, user);
+                return CreatedAtAction(nameof(GetUser), new { id = user.Id }, ApiResponse<UserDTO>.Ok(user));
             }
             catch (InvalidOperationException ex)
             {
-                return BadRequest(new { error = ex.Message });
+                return BadRequest(ApiResponse.Fail(ex.Message));
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = "Internal server error" });
+                return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
         }
 
@@ -67,19 +67,19 @@ namespace DigitalTwin.API.Controllers
             try
             {
                 var result = await _authService.AuthenticateUserAsync(request);
-                return Ok(result);
+                return Ok(ApiResponse<Core.Security.LoginResponse>.Ok(result));
             }
             catch (UnauthorizedAccessException)
             {
-                return Unauthorized(new { error = "Invalid credentials" });
+                return Unauthorized(ApiResponse.Fail("Invalid credentials"));
             }
             catch (InvalidOperationException ex)
             {
-                return BadRequest(new { error = ex.Message });
+                return BadRequest(ApiResponse.Fail(ex.Message));
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = "Internal server error" });
+                return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
         }
 
@@ -93,15 +93,15 @@ namespace DigitalTwin.API.Controllers
             try
             {
                 var result = await _authService.RefreshTokenAsync(request);
-                return Ok(result);
+                return Ok(ApiResponse<Core.Security.LoginResponse>.Ok(result));
             }
             catch (Microsoft.IdentityModel.Tokens.SecurityTokenException)
             {
-                return Unauthorized(new { error = "Invalid refresh token" });
+                return Unauthorized(ApiResponse.Fail("Invalid refresh token"));
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = "Internal server error" });
+                return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
         }
 
@@ -114,11 +114,11 @@ namespace DigitalTwin.API.Controllers
             try
             {
                 await _authService.LogoutAsync(request);
-                return Ok(new { message = "Logged out successfully" });
+                return Ok(ApiResponse.Ok("Logged out successfully"));
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = "Internal server error" });
+                return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
         }
 
@@ -133,19 +133,19 @@ namespace DigitalTwin.API.Controllers
                 var userId = User.GetUserId();
                 if (string.IsNullOrEmpty(userId))
                 {
-                    return Unauthorized();
+                    return Unauthorized(ApiResponse.Fail("User not authenticated"));
                 }
 
                 await _authService.ChangePasswordAsync(userId, request);
-                return Ok(new { message = "Password changed successfully" });
+                return Ok(ApiResponse.Ok("Password changed successfully"));
             }
             catch (UnauthorizedAccessException)
             {
-                return BadRequest(new { error = "Invalid current password" });
+                return BadRequest(ApiResponse.Fail("Invalid current password"));
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = "Internal server error" });
+                return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
         }
 
@@ -160,7 +160,7 @@ namespace DigitalTwin.API.Controllers
                 var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userId))
                 {
-                    return Unauthorized(new { error = "User not authenticated" });
+                    return Unauthorized(ApiResponse.Fail("User not authenticated"));
                 }
 
                 // In a real implementation, this would get user from user service
@@ -176,11 +176,11 @@ namespace DigitalTwin.API.Controllers
                     LastLoginAt = DateTime.UtcNow
                 };
 
-                return Ok(user);
+                return Ok(ApiResponse<UserDTO>.Ok(user));
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = "Internal server error" });
+                return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
         }
 
@@ -207,11 +207,11 @@ namespace DigitalTwin.API.Controllers
                     LastLoginAt = DateTime.UtcNow
                 };
 
-                return Ok(user);
+                return Ok(ApiResponse<UserDTO>.Ok(user));
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = "Internal server error" });
+                return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
         }
 
@@ -252,11 +252,11 @@ namespace DigitalTwin.API.Controllers
                     }
                 };
 
-                return Ok(users);
+                return Ok(ApiResponse<List<UserDTO>>.Ok(users));
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = "Internal server error" });
+                return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
         }
 
@@ -270,11 +270,11 @@ namespace DigitalTwin.API.Controllers
             try
             {
                 await _rbacService.AssignRoleAsync(userId, request.Role);
-                return Ok(new { message = "Role assigned successfully" });
+                return Ok(ApiResponse.Ok("Role assigned successfully"));
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = "Internal server error" });
+                return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
         }
 
@@ -289,7 +289,7 @@ namespace DigitalTwin.API.Controllers
                 var currentUserId = User.GetUserId();
                 if (string.IsNullOrEmpty(currentUserId))
                 {
-                    return Unauthorized();
+                    return Unauthorized(ApiResponse.Fail("User not authenticated"));
                 }
 
                 // Users can only view their own role unless they have manage users permission
@@ -301,14 +301,14 @@ namespace DigitalTwin.API.Controllers
                 var role = await _rbacService.GetUserRoleAsync(userId);
                 if (role == null)
                 {
-                    return NotFound();
+                    return NotFound(ApiResponse.Fail("User role not found"));
                 }
 
-                return Ok(role);
+                return Ok(ApiResponse<UserRole?>.Ok(role));
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = "Internal server error" });
+                return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
         }
 
@@ -323,7 +323,7 @@ namespace DigitalTwin.API.Controllers
                 var currentUserId = User.GetUserId();
                 if (string.IsNullOrEmpty(currentUserId))
                 {
-                    return Unauthorized();
+                    return Unauthorized(ApiResponse.Fail("User not authenticated"));
                 }
 
                 // Users can only view their own permissions unless they have manage users permission
@@ -333,11 +333,11 @@ namespace DigitalTwin.API.Controllers
                 }
 
                 var permissions = await _rbacService.GetUserPermissionsAsync(userId);
-                return Ok(permissions);
+                return Ok(ApiResponse<List<Permission>>.Ok(permissions));
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = "Internal server error" });
+                return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
         }
 
@@ -351,11 +351,11 @@ namespace DigitalTwin.API.Controllers
             try
             {
                 await _rbacService.GrantPermissionAsync(userId, request.Permission);
-                return Ok(new { message = "Permission granted successfully" });
+                return Ok(ApiResponse.Ok("Permission granted successfully"));
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = "Internal server error" });
+                return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
         }
 
@@ -369,11 +369,11 @@ namespace DigitalTwin.API.Controllers
             try
             {
                 await _rbacService.RevokePermissionAsync(userId, permission);
-                return Ok(new { message = "Permission revoked successfully" });
+                return Ok(ApiResponse.Ok("Permission revoked successfully"));
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = "Internal server error" });
+                return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
         }
 
@@ -387,11 +387,11 @@ namespace DigitalTwin.API.Controllers
             try
             {
                 var roles = await _rbacService.GetAllRolePermissionsAsync();
-                return Ok(roles);
+                return Ok(ApiResponse<Dictionary<UserRole, List<Permission>>>.Ok(roles));
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = "Internal server error" });
+                return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
         }
 
@@ -411,33 +411,33 @@ namespace DigitalTwin.API.Controllers
             try
             {
                 var logs = await _securityEventLogger.GetSecurityEventsAsync(page, pageSize);
-                
+
                 // Apply filters (in a real implementation, this would be done in the repository)
                 if (eventType.HasValue)
                 {
                     logs = logs.FindAll(l => l.EventType == eventType.Value);
                 }
-                
+
                 if (!string.IsNullOrEmpty(userId))
                 {
                     logs = logs.FindAll(l => l.UserId == userId);
                 }
-                
+
                 if (startDate.HasValue)
                 {
                     logs = logs.FindAll(l => l.Timestamp >= startDate.Value);
                 }
-                
+
                 if (endDate.HasValue)
                 {
                     logs = logs.FindAll(l => l.Timestamp <= endDate.Value);
                 }
 
-                return Ok(logs);
+                return Ok(ApiResponse<List<Core.Models.SecurityEvent>>.Ok(logs));
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = "Internal server error" });
+                return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
         }
 
@@ -455,23 +455,23 @@ namespace DigitalTwin.API.Controllers
             try
             {
                 var logs = await _securityEventLogger.GetSecurityEventsAsync();
-                
+
                 // Apply filters
                 if (eventType.HasValue)
                 {
                     logs = logs.FindAll(l => l.EventType == eventType.Value);
                 }
-                
+
                 if (!string.IsNullOrEmpty(userId))
                 {
                     logs = logs.FindAll(l => l.UserId == userId);
                 }
-                
+
                 if (startDate.HasValue)
                 {
                     logs = logs.FindAll(l => l.Timestamp >= startDate.Value);
                 }
-                
+
                 if (endDate.HasValue)
                 {
                     logs = logs.FindAll(l => l.Timestamp <= endDate.Value);
@@ -479,12 +479,12 @@ namespace DigitalTwin.API.Controllers
 
                 var csvData = ConvertLogsToCSV(logs);
                 var filename = $"audit_logs_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv";
-                
+
                 return File(System.Text.Encoding.UTF8.GetBytes(csvData), "text/csv", filename);
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = "Internal server error" });
+                return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
         }
 
@@ -497,18 +497,18 @@ namespace DigitalTwin.API.Controllers
             try
             {
                 var isValid = await _authService.ValidateTokenAsync(request.Token);
-                return Ok(isValid);
+                return Ok(ApiResponse<bool>.Ok(isValid));
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = "Internal server error" });
+                return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
         }
 
         private string ConvertLogsToCSV(List<Core.Models.SecurityEvent> logs)
         {
             var csv = "Timestamp,Event Type,User ID,Description,IP Address,User Agent,Request Path\n";
-            
+
             foreach (var log in logs.OrderByDescending(l => l.Timestamp))
             {
                 csv += $"{log.Timestamp:yyyy-MM-dd HH:mm:ss}," +
@@ -519,7 +519,7 @@ namespace DigitalTwin.API.Controllers
                        $"\"{log.UserAgent}\"," +
                        $"{log.RequestPath}\n";
             }
-            
+
             return csv;
         }
     }

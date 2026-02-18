@@ -148,6 +148,7 @@ namespace DigitalTwin.Core.Entities
     /// <summary>
     /// Emotional state of AI Twin
     /// </summary>
+    [Obsolete("Use DigitalTwin.Core.Enums.Emotion enum with EmotionMapper instead.")]
     public enum EmotionalState
     {
         Neutral,
@@ -165,6 +166,7 @@ namespace DigitalTwin.Core.Entities
     /// Maps external taxonomies (DeepFace 7 Ekman emotions, LLM strings)
     /// to unified internal representation at service boundaries
     /// </summary>
+    [Obsolete("Use DigitalTwin.Core.Enums.Emotion enum with EmotionMapper instead.")]
     public enum EmotionalTone
     {
         Neutral,
