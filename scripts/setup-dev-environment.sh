@@ -82,35 +82,45 @@ setup_environment() {
         echo
         read -p "Do you want to create a basic .env file now? (y/N): " -n 1 -r
         if [[ $REPLY =~ ^[Yy]$ ]]; then
+            # Generate random passwords for dev environment
+            DB_PASS=$(openssl rand -base64 24 2>/dev/null || head -c 24 /dev/urandom | base64)
+            REDIS_PASS=$(openssl rand -base64 24 2>/dev/null || head -c 24 /dev/urandom | base64)
+            RABBITMQ_PASS=$(openssl rand -base64 24 2>/dev/null || head -c 24 /dev/urandom | base64)
+            JWT_KEY=$(openssl rand -base64 64 2>/dev/null || head -c 64 /dev/urandom | base64)
+            GRAFANA_PASS=$(openssl rand -base64 16 2>/dev/null || head -c 16 /dev/urandom | base64)
+            MINIO_PASS=$(openssl rand -base64 24 2>/dev/null || head -c 24 /dev/urandom | base64)
+            SVC_KEY=$(openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | xxd -p)
+
             cat > .env << EOF
-# Digital Twin Development Environment
-DEPLOYMENT_ENVIRONMENT=development
-DB_HOST=localhost
-DB_PORT=5432
+# Digital Twin Development Environment — auto-generated passwords
+ASPNETCORE_ENVIRONMENT=Development
 DB_NAME=digitaltwin_dev
 DB_USER=devuser
-DB_PASSWORD=dev_password_123
-REDIS_HOST=localhost
+DB_PASSWORD=${DB_PASS}
+DB_UID=999
+DB_GID=999
+ConnectionStrings__DefaultConnection=Host=localhost;Database=digitaltwin_dev;Username=devuser;Password=${DB_PASS}
 REDIS_PORT=6379
-REDIS_PASSWORD=redis_password_123
-RABBITMQ_HOST=localhost
-RABBITMQ_PORT=5672
-RABBITMQ_USER=admin
-RABBITMQ_PASSWORD=admin123
-JWT_SECRET_KEY=dev_jwt_secret_key_32_chars_minimum
-API_URL=http://localhost:8080
-API_BASE_URL=http://localhost:8080/api
-UNITY_SERVER_URL=http://localhost:8081
-DEEPFACE_URL=http://localhost:8001
-AVATAR_GENERATION_URL=http://localhost:8002
-VOICE_SERVICE_URL=http://localhost:8003
-GRAFANA_ADMIN_PASSWORD=admin123
+REDIS_PASSWORD=${REDIS_PASS}
+RABBITMQ_USER=dtadmin
+RABBITMQ_PASSWORD=${RABBITMQ_PASS}
+JwtConfiguration__SecretKey=${JWT_KEY}
+JwtConfiguration__Issuer=DigitalTwin
+JwtConfiguration__Audience=DigitalTwin
+Services__DeepFace__BaseUrl=http://localhost:8001
+Services__Avatar__BaseUrl=http://localhost:8002
+Services__Voice__BaseUrl=http://localhost:8003
+Services__LLM__BaseUrl=http://localhost:8004
+CORS__AllowedOrigins=http://localhost:3000,http://localhost:8081,http://localhost:19006
+SERVICE_API_KEY=${SVC_KEY}
+CORS_ORIGINS=http://localhost:8080
+GRAFANA_ADMIN_PASSWORD=${GRAFANA_PASS}
 MINIO_ROOT_USER=minioadmin
-MINIO_ROOT_PASSWORD=minioadmin123
+MINIO_ROOT_PASSWORD=${MINIO_PASS}
+ELEVENLABS_API_KEY=
+OPENAI_API_KEY=
 DEBUG_MODE=true
-ENABLE_PROFILING=true
 ENABLE_SWAGGER=true
-ENABLE_API_EXPLORER=true
 EOF
             print_status "Created basic .env file"
             chmod 600 .env

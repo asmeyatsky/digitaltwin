@@ -13,7 +13,11 @@ import os
 import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import JSONResponse
 from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import openai
 from datetime import datetime
 
@@ -98,10 +102,28 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+SERVICE_API_KEY = os.getenv("SERVICE_API_KEY", "")
+
+
+@app.middleware("http")
+async def verify_api_key(request, call_next):
+    if request.url.path == "/health":
+        return await call_next(request)
+    if SERVICE_API_KEY:
+        api_key = request.headers.get("X-Service-Key")
+        if api_key != SERVICE_API_KEY:
+            return JSONResponse(status_code=401, content={"error": "Invalid API key"})
+    return await call_next(request)
+
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:8080").split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -268,7 +290,7 @@ async def generate_response(request: LLMRequest):
     except Exception as e:
         logger.error(f"Error generating response: {e}")
         raise HTTPException(
-            status_code=500, detail=f"Failed to generate response: {str(e)}"
+            status_code=500, detail="Internal server error"
         )
 
 
@@ -363,7 +385,7 @@ async def analyze_message(request: dict):
 
     except Exception as e:
         logger.error(f"Error analyzing message: {e}")
-        return {"error": f"Analysis failed: {str(e)}"}
+        return {"error": "Internal server error"}
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -381,4 +403,4 @@ async def health_check():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8002)
+    uvicorn.run(app, host="0.0.0.0", port=8004)

@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using DigitalTwin.Core.DTOs;
 using DigitalTwin.Core.Interfaces;
@@ -28,7 +30,7 @@ namespace DigitalTwin.Core.Services
             _httpClientFactory = httpClientFactory;
             _webhookRepository = webhookRepository;
             _deliveryRepository = deliveryRepository;
-            _eventProcessors = eventProcessors.ToDictionary(p => p.EventType, p);
+            _eventProcessors = eventProcessors.ToDictionary(p => p.EventType, p => p);
         }
 
         /// <summary>
@@ -223,7 +225,8 @@ namespace DigitalTwin.Core.Services
                 var httpClient = _httpClientFactory.CreateClient();
                 var webhookRequest = CreateHttpRequestMessage(request.Url, testEvent, request.Secret);
 
-                var response = await httpClient.SendAsync(webhookRequest, TimeSpan.FromSeconds(30));
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                var response = await httpClient.SendAsync(webhookRequest, cts.Token);
 
                 testResult.Success = response.IsSuccessStatusCode;
                 testResult.StatusCode = (int)response.StatusCode;
@@ -371,7 +374,8 @@ namespace DigitalTwin.Core.Services
                 var request = CreateHttpRequestMessage(webhook.Url, webhookEvent, webhook.Secret);
 
                 var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-                var response = await httpClient.SendAsync(request, TimeSpan.FromSeconds(30));
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                var response = await httpClient.SendAsync(request, cts.Token);
                 stopwatch.Stop();
 
                 delivery.StatusCode = (int)response.StatusCode;
@@ -447,7 +451,8 @@ namespace DigitalTwin.Core.Services
                 var request = CreateHttpRequestMessage(webhook.Url, webhookEvent, webhook.Secret);
 
                 var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-                var response = await httpClient.SendAsync(request, TimeSpan.FromSeconds(30));
+                using var cts2 = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                var response = await httpClient.SendAsync(request, cts2.Token);
                 stopwatch.Stop();
 
                 delivery.StatusCode = (int)response.StatusCode;
@@ -536,6 +541,317 @@ namespace DigitalTwin.Core.Services
         {
             if (!deliveries.Any()) return 0;
             return (double)deliveries.Count(d => d.Status == WebhookDeliveryStatus.Failed) / deliveries.Count * 100;
+        }
+
+        /// <summary>
+        /// Gets webhook delivery logs for a specific webhook
+        /// </summary>
+        public async Task<List<WebhookDeliveryLog>> GetDeliveryLogsAsync(Guid webhookId, DateTime? startDate = null, DateTime? endDate = null)
+        {
+            var deliveries = await _deliveryRepository.GetByWebhookIdAsync(webhookId);
+
+            // Filter by date range
+            if (startDate.HasValue)
+                deliveries = deliveries.Where(d => d.AttemptedAt >= startDate.Value).ToList();
+            if (endDate.HasValue)
+                deliveries = deliveries.Where(d => d.AttemptedAt <= endDate.Value).ToList();
+
+            // Convert deliveries to delivery logs
+            var logs = new List<WebhookDeliveryLog>();
+            foreach (var delivery in deliveries.OrderByDescending(d => d.AttemptedAt))
+            {
+                logs.Add(new WebhookDeliveryLog
+                {
+                    Id = Guid.NewGuid(),
+                    WebhookId = webhookId,
+                    EventId = delivery.EventId,
+                    Timestamp = delivery.AttemptedAt,
+                    LogLevel = delivery.Status == WebhookDeliveryStatus.Success ? "Info" : delivery.Status == WebhookDeliveryStatus.Failed ? "Error" : "Warning",
+                    Message = delivery.Status == WebhookDeliveryStatus.Success
+                        ? $"Successfully delivered event {delivery.EventType} (HTTP {delivery.StatusCode})"
+                        : $"Failed to deliver event {delivery.EventType}: {delivery.ErrorMessage ?? "Unknown error"}",
+                    Details = $"Attempt {delivery.RetryCount + 1}, Response time: {delivery.ResponseTime?.TotalMilliseconds ?? 0:F0}ms, Status: {delivery.StatusCode}",
+                    Exception = delivery.Status == WebhookDeliveryStatus.Failed ? delivery.ErrorMessage : null,
+                    Context = new Dictionary<string, object>
+                    {
+                        { "EventType", delivery.EventType },
+                        { "StatusCode", delivery.StatusCode },
+                        { "RetryCount", delivery.RetryCount },
+                        { "ResponseTime", delivery.ResponseTime?.TotalMilliseconds ?? 0 }
+                    }
+                });
+
+                // Add individual attempt logs if available
+                if (delivery.Attempts != null)
+                {
+                    foreach (var attempt in delivery.Attempts)
+                    {
+                        logs.Add(new WebhookDeliveryLog
+                        {
+                            Id = Guid.NewGuid(),
+                            WebhookId = webhookId,
+                            EventId = delivery.EventId,
+                            Timestamp = attempt.AttemptedAt,
+                            LogLevel = attempt.Status == WebhookDeliveryStatus.Success ? "Info" : "Warning",
+                            Message = $"Delivery attempt {attempt.AttemptNumber}: HTTP {attempt.StatusCode}",
+                            Details = attempt.ResponseBody,
+                            Exception = attempt.ErrorMessage,
+                            Context = new Dictionary<string, object>
+                            {
+                                { "AttemptNumber", attempt.AttemptNumber },
+                                { "StatusCode", attempt.StatusCode }
+                            }
+                        });
+                    }
+                }
+            }
+
+            return logs.OrderByDescending(l => l.Timestamp).ToList();
+        }
+
+        /// <summary>
+        /// Pauses a webhook subscription
+        /// </summary>
+        public async Task<bool> PauseWebhookAsync(Guid webhookId)
+        {
+            var webhook = await _webhookRepository.GetByIdAsync(webhookId);
+            if (webhook == null) return false;
+
+            webhook.IsPaused = true;
+            webhook.UpdatedAt = DateTime.UtcNow;
+            webhook.Metadata = webhook.Metadata ?? new Dictionary<string, object>();
+            webhook.Metadata["PausedAt"] = DateTime.UtcNow;
+
+            await _webhookRepository.UpdateAsync(webhook);
+            return true;
+        }
+
+        /// <summary>
+        /// Resumes a webhook subscription
+        /// </summary>
+        public async Task<bool> ResumeWebhookAsync(Guid webhookId)
+        {
+            var webhook = await _webhookRepository.GetByIdAsync(webhookId);
+            if (webhook == null) return false;
+
+            webhook.IsPaused = false;
+            webhook.UpdatedAt = DateTime.UtcNow;
+            webhook.Metadata = webhook.Metadata ?? new Dictionary<string, object>();
+            webhook.Metadata["ResumedAt"] = DateTime.UtcNow;
+
+            await _webhookRepository.UpdateAsync(webhook);
+            return true;
+        }
+
+        /// <summary>
+        /// Gets webhook performance metrics for a specific webhook over a time period
+        /// </summary>
+        public async Task<WebhookPerformanceMetrics> GetWebhookPerformanceMetricsAsync(Guid webhookId, DateTime startDate, DateTime endDate)
+        {
+            var deliveries = await _deliveryRepository.GetByWebhookIdAsync(webhookId);
+            var filteredDeliveries = deliveries
+                .Where(d => d.AttemptedAt >= startDate && d.AttemptedAt <= endDate)
+                .ToList();
+
+            var successfulDeliveries = filteredDeliveries.Where(d => d.Status == WebhookDeliveryStatus.Success).ToList();
+            var failedDeliveries = filteredDeliveries.Where(d => d.Status == WebhookDeliveryStatus.Failed).ToList();
+
+            var responseTimes = successfulDeliveries
+                .Where(d => d.ResponseTime.HasValue)
+                .Select(d => d.ResponseTime.Value.TotalMilliseconds)
+                .ToList();
+
+            var sortedResponseTimes = responseTimes.OrderBy(t => t).ToList();
+
+            // Calculate status code distribution
+            var statusCodeDistribution = filteredDeliveries
+                .Where(d => d.StatusCode > 0)
+                .GroupBy(d => d.StatusCode)
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            // Calculate top errors
+            var topErrors = failedDeliveries
+                .Where(d => !string.IsNullOrEmpty(d.ErrorMessage))
+                .GroupBy(d => d.ErrorMessage)
+                .OrderByDescending(g => g.Count())
+                .Take(5)
+                .Select(g => new WebhookErrorSummary
+                {
+                    ErrorMessage = g.Key,
+                    Count = g.Count(),
+                    FirstOccurrence = g.Min(d => d.AttemptedAt),
+                    LastOccurrence = g.Max(d => d.AttemptedAt),
+                    StatusCodes = g.Select(d => d.StatusCode).Distinct().ToList(),
+                    Percentage = filteredDeliveries.Count > 0 ? (double)g.Count() / filteredDeliveries.Count * 100 : 0
+                })
+                .ToList();
+
+            // Calculate availability (detect outage periods)
+            var outages = new List<WebhookOutage>();
+            var consecutiveFailures = new List<WebhookDelivery>();
+            foreach (var delivery in filteredDeliveries.OrderBy(d => d.AttemptedAt))
+            {
+                if (delivery.Status == WebhookDeliveryStatus.Failed)
+                {
+                    consecutiveFailures.Add(delivery);
+                }
+                else
+                {
+                    if (consecutiveFailures.Count >= 3)
+                    {
+                        outages.Add(new WebhookOutage
+                        {
+                            StartTime = consecutiveFailures.First().AttemptedAt,
+                            EndTime = delivery.AttemptedAt,
+                            Duration = delivery.AttemptedAt - consecutiveFailures.First().AttemptedAt,
+                            Reason = consecutiveFailures.First().ErrorMessage ?? "Unknown",
+                            IsResolved = true
+                        });
+                    }
+                    consecutiveFailures.Clear();
+                }
+            }
+
+            var totalPeriod = (endDate - startDate).TotalMinutes;
+            var totalDowntime = outages.Sum(o => o.Duration.TotalMinutes);
+            var uptimePercentage = totalPeriod > 0 ? (totalPeriod - totalDowntime) / totalPeriod * 100 : 100;
+
+            return new WebhookPerformanceMetrics
+            {
+                WebhookId = webhookId,
+                PeriodStart = startDate,
+                PeriodEnd = endDate,
+                TotalRequests = filteredDeliveries.Count,
+                SuccessfulRequests = successfulDeliveries.Count,
+                FailedRequests = failedDeliveries.Count,
+                SuccessRate = filteredDeliveries.Count > 0 ? (double)successfulDeliveries.Count / filteredDeliveries.Count * 100 : 0,
+                AverageResponseTime = responseTimes.Any() ? responseTimes.Average() : 0,
+                MinResponseTime = responseTimes.Any() ? responseTimes.Min() : 0,
+                MaxResponseTime = responseTimes.Any() ? responseTimes.Max() : 0,
+                P95ResponseTime = sortedResponseTimes.Count > 0 ? sortedResponseTimes[(int)(sortedResponseTimes.Count * 0.95)] : 0,
+                P99ResponseTime = sortedResponseTimes.Count > 0 ? sortedResponseTimes[(int)(sortedResponseTimes.Count * 0.99)] : 0,
+                StatusCodeDistribution = statusCodeDistribution,
+                TopErrors = topErrors,
+                Availability = new WebhookAvailability
+                {
+                    UptimePercentage = uptimePercentage,
+                    TotalDowntime = TimeSpan.FromMinutes(totalDowntime),
+                    OutageCount = outages.Count,
+                    LastOutageStart = outages.Any() ? outages.Last().StartTime : default,
+                    LastOutageEnd = outages.Any() ? outages.Last().EndTime ?? DateTime.UtcNow : default,
+                    Outages = outages
+                }
+            };
+        }
+
+        /// <summary>
+        /// Creates a batch delivery of webhook events to multiple webhooks
+        /// </summary>
+        public async Task<WebhookBatchDeliveryResult> CreateBatchDeliveryAsync(WebhookBatchDeliveryRequest request)
+        {
+            var batchResult = new WebhookBatchDeliveryResult
+            {
+                BatchId = Guid.NewGuid(),
+                ScheduledAt = request.ScheduledAt ?? DateTime.UtcNow,
+                StartedAt = DateTime.UtcNow,
+                Status = WebhookBatchStatus.InProgress,
+                DeliveryResults = new List<WebhookDeliveryResult>(),
+                TotalWebhooks = request.WebhookIds?.Count ?? 0,
+                SuccessfulDeliveries = 0,
+                FailedDeliveries = 0
+            };
+
+            if (request.WebhookIds == null || !request.WebhookIds.Any())
+            {
+                batchResult.Status = WebhookBatchStatus.Failed;
+                batchResult.ErrorMessage = "No webhook IDs provided";
+                batchResult.CompletedAt = DateTime.UtcNow;
+                return batchResult;
+            }
+
+            if (request.Events == null || !request.Events.Any())
+            {
+                batchResult.Status = WebhookBatchStatus.Failed;
+                batchResult.ErrorMessage = "No events provided";
+                batchResult.CompletedAt = DateTime.UtcNow;
+                return batchResult;
+            }
+
+            var options = request.Options ?? new WebhookBatchOptions();
+
+            foreach (var webhookId in request.WebhookIds)
+            {
+                var webhook = await _webhookRepository.GetByIdAsync(webhookId);
+                if (webhook == null || !webhook.IsActive || webhook.IsPaused)
+                {
+                    batchResult.FailedDeliveries++;
+                    batchResult.DeliveryResults.Add(new WebhookDeliveryResult
+                    {
+                        WebhookId = webhookId,
+                        Success = false,
+                        ErrorMessage = webhook == null ? "Webhook not found" : webhook.IsPaused ? "Webhook is paused" : "Webhook is inactive",
+                        AttemptedAt = DateTime.UtcNow
+                    });
+
+                    if (!options.ContinueOnError)
+                    {
+                        batchResult.Status = WebhookBatchStatus.Failed;
+                        batchResult.ErrorMessage = "Batch stopped due to error (ContinueOnError is false)";
+                        batchResult.CompletedAt = DateTime.UtcNow;
+                        return batchResult;
+                    }
+                    continue;
+                }
+
+                foreach (var webhookEvent in request.Events)
+                {
+                    try
+                    {
+                        var deliveryResult = await DeliverWebhookAsync(webhook, webhookEvent);
+                        batchResult.DeliveryResults.Add(deliveryResult);
+
+                        if (deliveryResult.Success)
+                            batchResult.SuccessfulDeliveries++;
+                        else
+                            batchResult.FailedDeliveries++;
+
+                        if (!deliveryResult.Success && !options.ContinueOnError)
+                        {
+                            batchResult.Status = WebhookBatchStatus.Failed;
+                            batchResult.ErrorMessage = "Batch stopped due to delivery error";
+                            batchResult.CompletedAt = DateTime.UtcNow;
+                            return batchResult;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        batchResult.FailedDeliveries++;
+                        batchResult.DeliveryResults.Add(new WebhookDeliveryResult
+                        {
+                            WebhookId = webhookId,
+                            EventId = webhookEvent.Id,
+                            Success = false,
+                            ErrorMessage = ex.Message,
+                            AttemptedAt = DateTime.UtcNow
+                        });
+
+                        if (!options.ContinueOnError)
+                        {
+                            batchResult.Status = WebhookBatchStatus.Failed;
+                            batchResult.ErrorMessage = $"Batch stopped due to exception: {ex.Message}";
+                            batchResult.CompletedAt = DateTime.UtcNow;
+                            return batchResult;
+                        }
+                    }
+                }
+            }
+
+            batchResult.Status = batchResult.FailedDeliveries > 0 && batchResult.SuccessfulDeliveries == 0
+                ? WebhookBatchStatus.Failed
+                : WebhookBatchStatus.Completed;
+            batchResult.CompletedAt = DateTime.UtcNow;
+
+            return batchResult;
         }
     }
 }

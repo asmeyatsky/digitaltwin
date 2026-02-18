@@ -53,9 +53,12 @@ spec:
       labels:
         app: digitaltwin-api
     spec:
+      securityContext:
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
       containers:
       - name: api-gateway
-        image: ghcr.io/asmeyatsky/digitaltwin/api-gateway:latest
+        image: ghcr.io/asmeyatsky/digitaltwin/api-gateway:v1.0.0
         ports:
         - containerPort: 8080
         env:
@@ -64,11 +67,15 @@ spec:
             configMapKeyRef:
               name: digitaltwin-config
               key: API_BASE_URL
-        - name: JWT_SECRET_KEY
+        - name: JwtConfiguration__SecretKey
           valueFrom:
             secretKeyRef:
               name: digitaltwin-secrets
               key: JWT_SECRET_KEY
+        - name: JwtConfiguration__Issuer
+          value: "DigitalTwin"
+        - name: JwtConfiguration__Audience
+          value: "DigitalTwin"
         resources:
           requests:
             memory: "512Mi"
@@ -149,6 +156,7 @@ spec:
     http:
       paths:
       - path: /
+        pathType: Prefix
         backend:
           service:
             name: digitaltwin-api-service

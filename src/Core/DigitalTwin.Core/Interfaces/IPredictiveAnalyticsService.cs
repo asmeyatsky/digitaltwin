@@ -58,7 +58,7 @@ namespace DigitalTwin.Core.Interfaces
         /// <summary>
         /// Retrains ML models with new data
         /// </summary>
-        Task<TrainingResult> RetrainModelsAsync(ModelRetrainingRequest request);
+        Task<BatchTrainingResult> RetrainModelsAsync(ModelRetrainingRequest request);
 
         /// <summary>
         /// Gets feature importance for predictions
@@ -280,9 +280,9 @@ namespace DigitalTwin.Core.Interfaces
     }
 
     /// <summary>
-    /// Training result
+    /// Batch training result
     /// </summary>
-    public class TrainingResult
+    public class BatchTrainingResult
     {
         public Guid Id { get; set; }
         public DateTime StartedAt { get; set; }
@@ -704,7 +704,11 @@ namespace DigitalTwin.Core.Interfaces
     {
         Increasing,
         Decreasing,
-        Stable
+        Stable,
+        InsufficientData,
+        Improving,
+        Declining,
+        Fluctuating
     }
 
     public enum InsightSeverity

@@ -69,7 +69,7 @@ namespace DigitalTwin.Core.Interfaces
         public Guid BuildingId { get; set; }
         public DateTime GeneratedAt { get; set; }
         public List<WidgetData> Widgets { get; set; }
-        public List<Alert> ActiveAlerts { get; set; }
+        public List<DashboardAlert> ActiveAlerts { get; set; }
         public SummaryKPIs SummaryKPIs { get; set; }
     }
 
@@ -355,13 +355,13 @@ namespace DigitalTwin.Core.Interfaces
         public double Efficiency { get; set; } // %
         public int AlertCount { get; set; }
         public double EnergyConsumption { get; set; } // kWh
-        public List<PerformanceMetric> Metrics { get; set; }
+        public List<OperationalMetric> Metrics { get; set; }
     }
 
     /// <summary>
-    /// Performance metric
+    /// Operational metric
     /// </summary>
-    public class PerformanceMetric
+    public class OperationalMetric
     {
         public string Name { get; set; }
         public double Value { get; set; }
@@ -516,31 +516,6 @@ namespace DigitalTwin.Core.Interfaces
     }
 
     /// <summary>
-    /// Equipment health data
-    /// </summary>
-    public class EquipmentHealth
-    {
-        public string EquipmentId { get; set; }
-        public string EquipmentName { get; set; }
-        public double HealthScore { get; set; } // 0-100
-        public string Status { get; set; } // Healthy, Warning, Critical
-        public List<HealthIndicator> Indicators { get; set; }
-        public DateTime NextMaintenance { get; set; }
-    }
-
-    /// <summary>
-    /// Health indicator
-    /// </summary>
-    public class HealthIndicator
-    {
-        public string Name { get; set; }
-        public double Value { get; set; }
-        public double Threshold { get; set; }
-        public string Status { get; set; }
-        public string Unit { get; set; }
-    }
-
-    /// <summary>
     /// Occupancy analytics data
     /// </summary>
     public class OccupancyAnalytics
@@ -691,9 +666,9 @@ namespace DigitalTwin.Core.Interfaces
     }
 
     /// <summary>
-    /// Alert data structure
+    /// Alert data structure for dashboard display
     /// </summary>
-    public class Alert
+    public class DashboardAlert
     {
         public string Id { get; set; }
         public string Type { get; set; }

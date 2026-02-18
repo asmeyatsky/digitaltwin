@@ -17,6 +17,9 @@ spec:
         app: digitaltwin-api
         version: v1
     spec:
+      securityContext:
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
       containers:
       - name: digitaltwin-api
         image: digitaltwin/api:latest
@@ -66,7 +69,7 @@ spec:
           failureThreshold: 3
         readinessProbe:
           httpGet:
-            path: /health/ready
+            path: /health
             port: 80
           initialDelaySeconds: 5
           periodSeconds: 5

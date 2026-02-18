@@ -13,12 +13,19 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 
 import numpy as np
+import PIL
+from PIL import Image
 from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
+from starlette.responses import JSONResponse
 from pydantic import BaseModel
-from PIL import Image
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import cv2
+
+PIL.Image.MAX_IMAGE_PIXELS = 25_000_000
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -79,9 +86,27 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+SERVICE_API_KEY = os.getenv("SERVICE_API_KEY", "")
+
+
+@app.middleware("http")
+async def verify_api_key(request, call_next):
+    if request.url.path == "/health":
+        return await call_next(request)
+    if SERVICE_API_KEY:
+        api_key = request.headers.get("X-Service-Key")
+        if api_key != SERVICE_API_KEY:
+            return JSONResponse(status_code=401, content={"error": "Invalid API key"})
+    return await call_next(request)
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:8080").split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -254,7 +279,7 @@ async def generate_avatar(
     except Exception as e:
         logger.error(f"Error generating avatar: {e}")
         avatar_jobs[avatar_id] = {"status": "failed", "error": str(e)}
-        raise HTTPException(status_code=500, detail=f"Avatar generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.post("/avatar/extract-landmarks", response_model=FaceLandmarks)
@@ -337,7 +362,7 @@ async def extract_landmarks(file: UploadFile = File(...)):
         raise
     except Exception as e:
         logger.error(f"Error extracting landmarks: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/avatar/{avatar_id}/status", response_model=AvatarStatus)

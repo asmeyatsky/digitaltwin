@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using DigitalTwin.Core.Interfaces;
 
 namespace DigitalTwin.Core.DTOs
 {
@@ -170,6 +171,9 @@ namespace DigitalTwin.Core.DTOs
         public OccupancyPrediction OccupancyPrediction { get; set; }
         public CostPrediction CostPrediction { get; set; }
         
+        public EnvironmentalPrediction EnvironmentalPrediction { get; set; }
+        public EquipmentHealthPrediction EquipmentHealthPrediction { get; set; }
+
         public List<string> Recommendations { get; set; }
         public List<string> RiskFactors { get; set; }
         public List<string> Opportunities { get; set; }

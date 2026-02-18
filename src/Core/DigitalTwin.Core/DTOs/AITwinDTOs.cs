@@ -97,7 +97,7 @@ namespace DigitalTwin.Core.DTOs
     {
         public string FromTopic { get; set; }
         public string ToTopic { get; set; }
-        public double SmoothnesScore { get; set; }
+        public double SmoothnessScore { get; set; }
         public string TransitionPhrase { get; set; }
     }
 

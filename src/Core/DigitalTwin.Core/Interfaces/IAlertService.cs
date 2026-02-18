@@ -194,7 +194,7 @@ namespace DigitalTwin.Core.Interfaces
         /// <summary>
         /// Tests notification channel configuration
         /// </summary>
-        Task<ChannelTestResult> TestNotificationChannelAsync(NotificationChannel channel, string testRecipient);
+        Task<ChannelTestResult> TestNotificationChannelAsync(AlertNotificationChannel channel, string testRecipient);
     }
 
     /// <summary>
@@ -270,7 +270,7 @@ namespace DigitalTwin.Core.Interfaces
         public AlertSeverity Severity { get; set; }
         public List<AlertCondition> Conditions { get; set; }
         public List<string> Recipients { get; set; }
-        public List<NotificationChannel> NotificationChannels { get; set; }
+        public List<AlertNotificationChannel> NotificationChannels { get; set; }
         public bool IsActive { get; set; }
         public TimeSpan? FrequencyLimit { get; set; }
         public string Title { get; set; }
@@ -298,7 +298,7 @@ namespace DigitalTwin.Core.Interfaces
         public Guid BuildingId { get; set; }
         public List<string> AlertTypes { get; set; }
         public List<AlertSeverity> Severities { get; set; }
-        public List<NotificationChannel> Channels { get; set; }
+        public List<AlertNotificationChannel> Channels { get; set; }
         public bool IsActive { get; set; }
         public DateTime SubscribedAt { get; set; }
         public DateTime? UnsubscribedAt { get; set; }
@@ -403,7 +403,7 @@ namespace DigitalTwin.Core.Interfaces
         public string TitleTemplate { get; set; }
         public string DescriptionTemplate { get; set; }
         public List<string> DefaultRecipients { get; set; }
-        public List<NotificationChannel> DefaultChannels { get; set; }
+        public List<AlertNotificationChannel> DefaultChannels { get; set; }
         public Dictionary<string, object> DefaultConditions { get; set; }
     }
 
@@ -474,7 +474,7 @@ namespace DigitalTwin.Core.Interfaces
 
     public class ChannelPerformanceMetrics
     {
-        public NotificationChannel Channel { get; set; }
+        public AlertNotificationChannel Channel { get; set; }
         public int TotalSent { get; set; }
         public int SuccessfulDeliveries { get; set; }
         public double DeliveryRate { get; set; }
@@ -519,7 +519,7 @@ namespace DigitalTwin.Core.Interfaces
         public string Name { get; set; }
         public List<string> Conditions { get; set; }
         public List<string> Recipients { get; set; }
-        public List<NotificationChannel> Channels { get; set; }
+        public List<AlertNotificationChannel> Channels { get; set; }
         public bool IsActive { get; set; }
         public int Priority { get; set; }
         public DateTime CreatedAt { get; set; }
@@ -560,7 +560,7 @@ namespace DigitalTwin.Core.Interfaces
     public class NotificationRequest
     {
         public Guid? AlertId { get; set; }
-        public NotificationChannel Channel { get; set; }
+        public AlertNotificationChannel Channel { get; set; }
         public List<string> Recipients { get; set; }
         public string Subject { get; set; }
         public string Message { get; set; }
@@ -576,7 +576,7 @@ namespace DigitalTwin.Core.Interfaces
         public Guid Id { get; set; }
         public Guid? AlertId { get; set; }
         public string UserId { get; set; }
-        public NotificationChannel Channel { get; set; }
+        public AlertNotificationChannel Channel { get; set; }
         public string Subject { get; set; }
         public string Message { get; set; }
         public NotificationStatus Status { get; set; }
@@ -599,7 +599,7 @@ namespace DigitalTwin.Core.Interfaces
 
     public class NotificationChannelInfo
     {
-        public NotificationChannel Channel { get; set; }
+        public AlertNotificationChannel Channel { get; set; }
         public string Name { get; set; }
         public string Description { get; set; }
         public bool IsConfigured { get; set; }
@@ -613,7 +613,7 @@ namespace DigitalTwin.Core.Interfaces
 
     public class ChannelTestResult
     {
-        public NotificationChannel Channel { get; set; }
+        public AlertNotificationChannel Channel { get; set; }
         public bool Success { get; set; }
         public string TestRecipient { get; set; }
         public DateTime SentAt { get; set; }
@@ -653,7 +653,7 @@ namespace DigitalTwin.Core.Interfaces
         Closed
     }
 
-    public enum NotificationChannel
+    public enum AlertNotificationChannel
     {
         Email,
         SMS,
@@ -664,6 +664,19 @@ namespace DigitalTwin.Core.Interfaces
         Teams,
         Desktop,
         Mobile
+    }
+
+    public enum AlertType
+    {
+        Temperature,
+        Humidity,
+        AirQuality,
+        Energy,
+        Occupancy,
+        Equipment,
+        Safety,
+        Maintenance,
+        System
     }
 
     public enum NotificationStatus

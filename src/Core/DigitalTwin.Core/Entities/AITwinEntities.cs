@@ -162,6 +162,8 @@ namespace DigitalTwin.Core.Entities
 
     /// <summary>
     /// Emotional tone detected in messages
+    /// Maps external taxonomies (DeepFace 7 Ekman emotions, LLM strings)
+    /// to unified internal representation at service boundaries
     /// </summary>
     public enum EmotionalTone
     {
@@ -170,7 +172,9 @@ namespace DigitalTwin.Core.Entities
         Excited,
         Concerned,
         Frustrated,
-        Curious
+        Curious,
+        Sad,
+        Calm
     }
 
     /// <summary>
@@ -225,9 +229,22 @@ namespace DigitalTwin.Core.Entities
         public Guid RoomId { get; set; }
         public string Name { get; set; }
         public string Type { get; set; }
-        public string Status { get; set; }
+        public EquipmentStatus Status { get; set; }
+        public DateTime InstallationDate { get; set; }
         public DateTime LastMaintenance { get; set; }
         public DateTime? NextMaintenance { get; set; }
+    }
+
+    /// <summary>
+    /// Status of equipment
+    /// </summary>
+    public enum EquipmentStatus
+    {
+        Operational,
+        NeedsRepair,
+        UnderMaintenance,
+        Decommissioned,
+        Offline
     }
 
     /// <summary>
@@ -257,6 +274,7 @@ namespace DigitalTwin.Core.Entities
         Energy,
         Occupancy,
         Noise,
-        CO2
+        CO2,
+        EnergyMeter
     }
 }

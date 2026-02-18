@@ -14,8 +14,12 @@ from contextlib import asynccontextmanager
 import httpx
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse
+from starlette.responses import JSONResponse
 from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -51,9 +55,27 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+SERVICE_API_KEY = os.getenv("SERVICE_API_KEY", "")
+
+
+@app.middleware("http")
+async def verify_api_key(request, call_next):
+    if request.url.path == "/health":
+        return await call_next(request)
+    if SERVICE_API_KEY:
+        api_key = request.headers.get("X-Service-Key")
+        if api_key != SERVICE_API_KEY:
+            return JSONResponse(status_code=401, content={"error": "Invalid API key"})
+    return await call_next(request)
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:8080").split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -217,7 +239,7 @@ async def text_to_speech(request: TTSRequest):
 
     except httpx.HTTPError as e:
         logger.error(f"TTS error: {e}")
-        raise HTTPException(status_code=503, detail=f"TTS failed: {str(e)}")
+        raise HTTPException(status_code=503, detail="Internal server error")
 
 
 @app.post("/tts/with-visemes")
@@ -320,7 +342,7 @@ async def text_to_speech_with_visemes(request: TTSRequest):
 
         except Exception as fallback_error:
             logger.error(f"Fallback TTS also failed: {fallback_error}")
-            raise HTTPException(status_code=503, detail=f"TTS failed: {str(e)}")
+            raise HTTPException(status_code=503, detail="Internal server error")
 
 
 @app.get("/audio/{audio_id}")
@@ -409,7 +431,7 @@ async def clone_voice(
         logger.error(f"Voice cloning error: {e}")
         voice_cloning_jobs[job_id]["status"] = "failed"
         voice_cloning_jobs[job_id]["error"] = str(e)
-        raise HTTPException(status_code=503, detail=f"Voice cloning failed: {str(e)}")
+        raise HTTPException(status_code=503, detail="Internal server error")
 
 
 @app.get("/voice/clone/{job_id}/status", response_model=VoiceCloneStatus)
@@ -462,7 +484,7 @@ async def delete_user_voice(user_id: str):
 
     except httpx.HTTPError as e:
         logger.error(f"Error deleting voice: {e}")
-        raise HTTPException(status_code=503, detail=f"Failed to delete voice: {str(e)}")
+        raise HTTPException(status_code=503, detail="Internal server error")
 
 
 # Viseme generation helpers

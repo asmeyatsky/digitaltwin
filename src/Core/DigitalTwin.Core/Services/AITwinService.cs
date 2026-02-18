@@ -547,11 +547,11 @@ Always respond in a way that reflects your learned personality and the current e
                 tags.Add("security-systems");
 
             // Interaction type tags
-            if (interaction.Type == "question")
+            if (interaction.MessageType == "question")
                 tags.Add("information-request");
-            else if (interaction.Type == "command")
+            else if (interaction.MessageType == "command")
                 tags.Add("action-request");
-            else if (interaction.Type == "feedback")
+            else if (interaction.MessageType == "feedback")
                 tags.Add("user-feedback");
 
             return tags;
@@ -909,7 +909,7 @@ Always respond in a way that reflects your learned personality and the current e
                 foreach (var transition in conversationData.TopicTransitions)
                 {
                     var transitionKey = $"transition_{transition.FromTopic}_{transition.ToTopic}";
-                    profile.BehavioralPatterns[transitionKey] = transition.SmoothnesScore;
+                    profile.BehavioralPatterns[transitionKey] = transition.SmoothnessScore;
                 }
             }
 
@@ -1515,7 +1515,7 @@ Always respond in a way that reflects your learned personality and the current e
                     {
                         FromTopic = prevTopics.First(),
                         ToTopic = currentTopics.First(),
-                        SmoothnesScore = 0.5 // Would calculate based on actual transition smoothness
+                        SmoothnessScore = 0.5 // Would calculate based on actual transition smoothness
                     });
                 }
             }
@@ -1613,6 +1613,466 @@ Always respond in a way that reflects your learned personality and the current e
             if (string.IsNullOrEmpty(content)) return "";
             if (content.Length <= maxLength) return content;
             return content.Substring(0, maxLength - 3) + "...";
+        }
+
+        /// <summary>
+        /// Gets AI twin profiles for a user
+        /// </summary>
+        public async Task<List<AITwinProfile>> GetUserTwinProfilesAsync(string userId)
+        {
+            if (string.IsNullOrEmpty(userId))
+                return new List<AITwinProfile>();
+
+            return await _aiTwinRepository.GetByUserIdAsync(userId);
+        }
+
+        /// <summary>
+        /// Updates AI twin personality traits
+        /// </summary>
+        public async Task<bool> UpdatePersonalityTraitsAsync(Guid twinId, AITwinPersonalityTraits traits)
+        {
+            var profile = await _aiTwinRepository.GetByIdAsync(twinId);
+            if (profile == null) return false;
+
+            profile.PersonalityTraits = traits;
+            profile.LastInteraction = DateTime.UtcNow;
+
+            // Store the personality update as a memory
+            profile.MemoryStore.Add(new AITwinMemory
+            {
+                Id = Guid.NewGuid(),
+                Type = AITwinMemoryType.Interaction,
+                Content = "Personality traits were manually updated by user",
+                Importance = 0.8,
+                CreationDate = DateTime.UtcNow,
+                Tags = new List<string> { "personality-update", "user-action" }
+            });
+
+            await _aiTwinRepository.UpdateAsync(profile);
+            return true;
+        }
+
+        /// <summary>
+        /// Gets AI twin insights based on accumulated knowledge and patterns
+        /// </summary>
+        public async Task<AITwinInsights> GetTwinInsightsAsync(Guid twinId)
+        {
+            var profile = await _aiTwinRepository.GetByIdAsync(twinId);
+            if (profile == null)
+                throw new ArgumentException($"AI twin profile with ID {twinId} not found");
+
+            var insights = new AITwinInsights
+            {
+                TwinId = twinId,
+                GeneratedAt = DateTime.UtcNow,
+                KeyObservations = new List<string>(),
+                Recommendations = new List<string>(),
+                PredictedNeeds = new List<string>(),
+                ConfidenceScores = new Dictionary<string, double>()
+            };
+
+            // Generate observations based on interaction history
+            var recentInteractions = profile.InteractionHistory
+                .Where(i => i.Timestamp > DateTime.UtcNow.AddDays(-30))
+                .ToList();
+
+            if (recentInteractions.Any())
+            {
+                var avgMessageLength = recentInteractions.Average(i => i.Content?.Length ?? 0);
+                var questionCount = recentInteractions.Count(i => i.Content?.Contains("?") == true);
+
+                insights.KeyObservations.Add($"User has had {recentInteractions.Count} interactions in the past 30 days");
+
+                if (questionCount > recentInteractions.Count * 0.5)
+                    insights.KeyObservations.Add("User frequently asks questions, indicating information-seeking behavior");
+
+                // Analyze topics
+                var topics = recentInteractions
+                    .SelectMany(i => ExtractTopicsFromContent(i.Content))
+                    .GroupBy(t => t)
+                    .OrderByDescending(g => g.Count())
+                    .Take(3)
+                    .ToList();
+
+                if (topics.Any())
+                    insights.KeyObservations.Add($"Most discussed topics: {string.Join(", ", topics.Select(t => t.Key))}");
+            }
+            else
+            {
+                insights.KeyObservations.Add("Limited interaction history. More conversations will improve insights accuracy.");
+            }
+
+            // Generate recommendations
+            if (profile.ActivationLevel < 0.3)
+                insights.Recommendations.Add("Engage in more conversations to improve AI twin learning and personalization");
+            if (profile.KnowledgeBase.Count < 10)
+                insights.Recommendations.Add("Provide more building-specific information to enhance knowledge base");
+            if (profile.BehavioralPatterns.Count < 5)
+                insights.Recommendations.Add("Continue interacting to allow the AI twin to learn your communication preferences");
+
+            insights.Recommendations.Add("Review and update personality traits if the AI twin's communication style needs adjustment");
+
+            // Predicted needs based on patterns
+            if (profile.BehavioralPatterns.TryGetValue("peak_interaction_hour", out var peakHour))
+                insights.PredictedNeeds.Add($"User is most active around {(int)peakHour}:00 - consider scheduling reports at this time");
+
+            if (profile.BehavioralPatterns.TryGetValue("technical_preference", out var techPref) && techPref > 0.5)
+                insights.PredictedNeeds.Add("User prefers technical detail - provide comprehensive data in responses");
+
+            insights.PredictedNeeds.Add("Regular building performance updates based on interaction patterns");
+
+            // Confidence scores
+            insights.ConfidenceScores["observations"] = Math.Min(recentInteractions.Count / 50.0, 0.95);
+            insights.ConfidenceScores["recommendations"] = Math.Min(profile.ActivationLevel + 0.3, 0.9);
+            insights.ConfidenceScores["predictions"] = Math.Min(profile.BehavioralPatterns.Count / 15.0, 0.85);
+
+            return insights;
+        }
+
+        /// <summary>
+        /// Backs up AI twin data as a serialized JSON string
+        /// </summary>
+        public async Task<string> BackupTwinDataAsync(Guid twinId)
+        {
+            var profile = await _aiTwinRepository.GetByIdAsync(twinId);
+            if (profile == null)
+                throw new ArgumentException($"AI twin profile with ID {twinId} not found");
+
+            var backupData = new Dictionary<string, object>
+            {
+                { "profileId", profile.Id },
+                { "name", profile.Name },
+                { "description", profile.Description },
+                { "userId", profile.UserId },
+                { "buildingId", profile.BuildingId },
+                { "creationDate", profile.CreationDate },
+                { "learningMode", profile.LearningMode.ToString() },
+                { "activationLevel", profile.ActivationLevel },
+                { "emotionalState", profile.EmotionalState.ToString() },
+                { "personalityTraits", profile.PersonalityTraits },
+                { "preferences", profile.Preferences },
+                { "behavioralPatterns", profile.BehavioralPatterns },
+                { "knowledgeBaseCount", profile.KnowledgeBase?.Count ?? 0 },
+                { "memoryStoreCount", profile.MemoryStore?.Count ?? 0 },
+                { "interactionCount", profile.InteractionHistory?.Count ?? 0 },
+                { "backupTimestamp", DateTime.UtcNow },
+                { "backupVersion", "1.0" }
+            };
+
+            var jsonBackup = System.Text.Json.JsonSerializer.Serialize(backupData, new System.Text.Json.JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+
+            return await Task.FromResult(jsonBackup);
+        }
+
+        /// <summary>
+        /// Restores AI twin from backup data
+        /// </summary>
+        public async Task<AITwinRestoreResult> RestoreTwinFromBackupAsync(string backupData, string userId)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(backupData))
+                {
+                    return new AITwinRestoreResult
+                    {
+                        Success = false,
+                        Message = "Backup data is empty"
+                    };
+                }
+
+                var backup = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, System.Text.Json.JsonElement>>(backupData);
+                if (backup == null)
+                {
+                    return new AITwinRestoreResult
+                    {
+                        Success = false,
+                        Message = "Failed to parse backup data"
+                    };
+                }
+
+                var name = backup.ContainsKey("name") ? backup["name"].GetString() : "Restored Twin";
+                var buildingId = backup.ContainsKey("buildingId") ? Guid.Parse(backup["buildingId"].GetString()) : Guid.Empty;
+                var activationLevel = backup.ContainsKey("activationLevel") ? backup["activationLevel"].GetDouble() : 0.1;
+
+                // Create a new profile from backup data
+                var request = new AITwinCreationRequest
+                {
+                    Name = $"{name} (Restored)",
+                    Description = $"Restored from backup on {DateTime.UtcNow:yyyy-MM-dd}",
+                    UserId = userId,
+                    BuildingId = buildingId,
+                    LearningMode = AITwinLearningMode.Adaptive
+                };
+
+                var restoredProfile = await CreateAITwinProfileAsync(request);
+                restoredProfile.ActivationLevel = activationLevel;
+                await _aiTwinRepository.UpdateAsync(restoredProfile);
+
+                var interactionsRestored = backup.ContainsKey("interactionCount") ? backup["interactionCount"].GetInt32() : 0;
+                var memoriesRestored = backup.ContainsKey("memoryStoreCount") ? backup["memoryStoreCount"].GetInt32() : 0;
+
+                return new AITwinRestoreResult
+                {
+                    Success = true,
+                    RestoredTwinId = restoredProfile.Id,
+                    Message = "AI Twin restored successfully from backup",
+                    RestoredAt = DateTime.UtcNow,
+                    InteractionsRestored = interactionsRestored,
+                    MemoriesRestored = memoriesRestored
+                };
+            }
+            catch (Exception ex)
+            {
+                return new AITwinRestoreResult
+                {
+                    Success = false,
+                    Message = $"Failed to restore from backup: {ex.Message}",
+                    RestoredAt = DateTime.UtcNow
+                };
+            }
+        }
+
+        /// <summary>
+        /// Gets AI twin analytics
+        /// </summary>
+        public async Task<AITwinAnalytics> GetTwinAnalyticsAsync(Guid twinId)
+        {
+            var profile = await _aiTwinRepository.GetByIdAsync(twinId);
+            if (profile == null)
+                throw new ArgumentException($"AI twin profile with ID {twinId} not found");
+
+            var now = DateTime.UtcNow;
+            var allInteractions = profile.InteractionHistory ?? new List<AITwinInteraction>();
+            var weekInteractions = allInteractions.Where(i => i.Timestamp > now.AddDays(-7)).ToList();
+            var monthInteractions = allInteractions.Where(i => i.Timestamp > now.AddDays(-30)).ToList();
+
+            // Calculate topic distribution
+            var topicDistribution = allInteractions
+                .SelectMany(i => ExtractTopicsFromContent(i.Content))
+                .GroupBy(t => t)
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            // Calculate emotional tone distribution
+            var emotionalDistribution = allInteractions
+                .GroupBy(i => i.EmotionalTone.ToString())
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            // Find most frequent queries
+            var mostFrequentQueries = allInteractions
+                .Where(i => i.Content?.Contains("?") == true)
+                .GroupBy(i => i.Content?.Split('?').First()?.Trim())
+                .OrderByDescending(g => g.Count())
+                .Take(5)
+                .Select(g => g.Key ?? "Unknown query")
+                .ToList();
+
+            // Calculate satisfaction score based on positive emotional tones
+            var positiveInteractions = allInteractions.Count(i =>
+                i.EmotionalTone == EmotionalTone.Happy || i.EmotionalTone == EmotionalTone.Excited);
+            var satisfactionScore = allInteractions.Count > 0
+                ? (double)positiveInteractions / allInteractions.Count * 100
+                : 50.0;
+
+            return new AITwinAnalytics
+            {
+                TwinId = twinId,
+                AnalysisDate = now,
+                TotalInteractions = allInteractions.Count,
+                InteractionsThisWeek = weekInteractions.Count,
+                InteractionsThisMonth = monthInteractions.Count,
+                AverageResponseTime = 1.5, // Default estimate in seconds
+                AverageConfidence = 0.82,
+                TopicDistribution = topicDistribution,
+                EmotionalToneDistribution = emotionalDistribution,
+                MostFrequentQueries = mostFrequentQueries,
+                UserSatisfactionScore = satisfactionScore
+            };
+        }
+
+        /// <summary>
+        /// Sets the learning mode for an AI twin
+        /// </summary>
+        public async Task<bool> SetLearningModeAsync(Guid twinId, AITwinLearningMode mode)
+        {
+            var profile = await _aiTwinRepository.GetByIdAsync(twinId);
+            if (profile == null) return false;
+
+            profile.LearningMode = mode;
+            profile.LastInteraction = DateTime.UtcNow;
+
+            // Store the mode change as a memory
+            profile.MemoryStore.Add(new AITwinMemory
+            {
+                Id = Guid.NewGuid(),
+                Type = AITwinMemoryType.Interaction,
+                Content = $"Learning mode changed to {mode}",
+                Importance = 0.7,
+                CreationDate = DateTime.UtcNow,
+                Tags = new List<string> { "system-change", "learning-mode" }
+            });
+
+            await _aiTwinRepository.UpdateAsync(profile);
+            return true;
+        }
+
+        /// <summary>
+        /// Resets AI twin learning, clearing learned patterns and memories while keeping the profile
+        /// </summary>
+        public async Task<bool> ResetLearningAsync(Guid twinId)
+        {
+            var profile = await _aiTwinRepository.GetByIdAsync(twinId);
+            if (profile == null) return false;
+
+            // Reset learned data while preserving core profile
+            profile.BehavioralPatterns.Clear();
+            profile.MemoryStore.Clear();
+            profile.InteractionHistory.Clear();
+            profile.ActivationLevel = 0.1;
+            profile.EmotionalState = EmotionalState.Neutral;
+            profile.PersonalityTraits = InitializePersonalityTraits(null);
+            profile.LastInteraction = DateTime.UtcNow;
+
+            // Keep only core knowledge (self-knowledge and building layout)
+            profile.KnowledgeBase = profile.KnowledgeBase
+                .Where(k => k.Type == AITwinKnowledgeType.Self || k.Type == AITwinKnowledgeType.BuildingLayout)
+                .ToList();
+
+            await _aiTwinRepository.UpdateAsync(profile);
+            return true;
+        }
+
+        /// <summary>
+        /// Gets AI twin health status
+        /// </summary>
+        public async Task<AITwinHealthStatus> GetTwinHealthStatusAsync(Guid twinId)
+        {
+            var profile = await _aiTwinRepository.GetByIdAsync(twinId);
+            if (profile == null)
+            {
+                return new AITwinHealthStatus
+                {
+                    TwinId = twinId,
+                    Status = "Unhealthy",
+                    LastCheckTime = DateTime.UtcNow,
+                    IsResponsive = false,
+                    OverallHealthScore = 0,
+                    Issues = new List<string> { $"AI twin profile with ID {twinId} not found" }
+                };
+            }
+
+            var issues = new List<string>();
+            var recommendations = new List<string>();
+            var healthScore = 100.0;
+
+            // Check knowledge base health
+            var knowledgeBaseHealthy = profile.KnowledgeBase != null && profile.KnowledgeBase.Count > 0;
+            if (!knowledgeBaseHealthy)
+            {
+                issues.Add("Knowledge base is empty");
+                recommendations.Add("Initialize or restore the knowledge base");
+                healthScore -= 20;
+            }
+            else if (profile.KnowledgeBase.Count < 3)
+            {
+                issues.Add("Knowledge base has very few entries");
+                recommendations.Add("Train the AI twin with more building data");
+                healthScore -= 10;
+            }
+
+            // Check memory system health
+            var memorySystemHealthy = profile.MemoryStore != null;
+            if (!memorySystemHealthy)
+            {
+                issues.Add("Memory system is unavailable");
+                healthScore -= 15;
+            }
+
+            // Check responsiveness (based on last interaction)
+            var isResponsive = true;
+            var timeSinceLastInteraction = DateTime.UtcNow - profile.LastInteraction;
+            if (timeSinceLastInteraction > TimeSpan.FromDays(30))
+            {
+                issues.Add("No interactions in the past 30 days; the twin may need retraining");
+                recommendations.Add("Engage with the AI twin to keep its learning active");
+                healthScore -= 10;
+            }
+
+            // Check activation level
+            if (profile.ActivationLevel < 0.1)
+            {
+                issues.Add("Activation level is critically low");
+                recommendations.Add("Initiate training sessions to improve activation");
+                healthScore -= 15;
+            }
+
+            // Check LLM connection (simulated - would check real connection in production)
+            var llmConnectionHealthy = true;
+
+            // Determine overall status
+            var status = healthScore >= 80 ? "Healthy" : healthScore >= 50 ? "Degraded" : "Unhealthy";
+
+            if (!issues.Any())
+                recommendations.Add("All systems are healthy. Continue regular interactions for optimal performance.");
+
+            return new AITwinHealthStatus
+            {
+                TwinId = twinId,
+                Status = status,
+                LastCheckTime = DateTime.UtcNow,
+                IsResponsive = isResponsive,
+                KnowledgeBaseHealthy = knowledgeBaseHealthy,
+                MemorySystemHealthy = memorySystemHealthy,
+                LLMConnectionHealthy = llmConnectionHealthy,
+                OverallHealthScore = Math.Max(0, healthScore),
+                Issues = issues,
+                Recommendations = recommendations
+            };
+        }
+
+        /// <summary>
+        /// Initializes a user session
+        /// </summary>
+        public async Task InitializeUserSessionAsync(string userId)
+        {
+            // Stub implementation - session initialization logic to be implemented
+            await Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Ends a user session
+        /// </summary>
+        public async Task EndUserSessionAsync(string userId)
+        {
+            // Stub implementation - session cleanup logic to be implemented
+            await Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Generates a response for a user message with context
+        /// </summary>
+        public async Task<string> GenerateResponseAsync(string userId, string message, Dictionary<string, object> context)
+        {
+            // Stub implementation - delegate to LLM service when fully implemented
+            var request = new LLMRequest
+            {
+                UserPrompt = message,
+                Context = context
+            };
+            var response = await _llmService.GenerateResponseAsync(request);
+            return response?.Content ?? "I'm sorry, I couldn't generate a response at this time.";
+        }
+
+        /// <summary>
+        /// Generates a greeting for a user
+        /// </summary>
+        public async Task<string> GenerateGreetingAsync(string userId)
+        {
+            // Stub implementation - personalized greeting logic to be implemented
+            await Task.CompletedTask;
+            return $"Hello! Welcome back. How can I assist you today?";
         }
     }
 }

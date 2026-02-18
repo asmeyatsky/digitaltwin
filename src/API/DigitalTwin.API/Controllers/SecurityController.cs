@@ -3,11 +3,12 @@ using Microsoft.AspNetCore.Authorization;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.IdentityModel.Tokens.Jwt;
 using DigitalTwin.Core.Security;
-using DigitalTwin.Core.DTOs;
 using DigitalTwin.Core.Enums;
-using DigitalTwin.Infrastructure.Attributes;
-using DigitalTwin.Infrastructure.Filters;
+using DigitalTwin.Core.DTOs;
+using UserDTO = DigitalTwin.Core.Security.UserDTO;
+using LoginResponse = DigitalTwin.Core.Security.LoginResponse;
 using System.Security.Claims;
 
 namespace DigitalTwin.API.Controllers
@@ -39,9 +40,6 @@ namespace DigitalTwin.API.Controllers
         /// </summary>
         [HttpPost("register")]
         [AllowAnonymous]
-        [ValidateModelAttribute]
-        [SqlInjectionProtection]
-        [XssProtection]
         public async Task<ActionResult<UserDTO>> RegisterUser([FromBody] Core.DTOs.RegisterUserRequest request)
         {
             try
@@ -64,9 +62,6 @@ namespace DigitalTwin.API.Controllers
         /// </summary>
         [HttpPost("login")]
         [AllowAnonymous]
-        [ValidateModelAttribute]
-        [SqlInjectionProtection]
-        [XssProtection]
         public async Task<ActionResult<LoginResponse>> Login([FromBody] Core.DTOs.LoginRequest request)
         {
             try
@@ -100,7 +95,7 @@ namespace DigitalTwin.API.Controllers
                 var result = await _authService.RefreshTokenAsync(request);
                 return Ok(result);
             }
-            catch (SecurityTokenException)
+            catch (Microsoft.IdentityModel.Tokens.SecurityTokenException)
             {
                 return Unauthorized(new { error = "Invalid refresh token" });
             }
@@ -158,7 +153,6 @@ namespace DigitalTwin.API.Controllers
         /// Get current user profile
         /// </summary>
         [HttpGet("profile")]
-        [AuthorizeUserOwnership]
         public async Task<ActionResult<UserDTO>> GetCurrentUser()
         {
             try
@@ -190,33 +184,11 @@ namespace DigitalTwin.API.Controllers
             }
         }
 
-                // In a real implementation, this would get user from user service
-                // For now, return a mock user
-                var user = new UserDTO
-                {
-                    Id = userId,
-                    Email = "user@example.com",
-                    FirstName = "User",
-                    LastName = "Name",
-                    Role = UserRole.Viewer,
-                    IsActive = true,
-                    CreatedAt = DateTime.UtcNow,
-                    LastLoginAt = DateTime.UtcNow
-                };
-
-                return Ok(user);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { error = "Internal server error" });
-            }
-        }
-
         /// <summary>
         /// Get user by ID (Admin only)
         /// </summary>
         [HttpGet("users/{id}")]
-        [RequirePermission(Permission.ManageUsers)]
+        [Authorize(Roles = "Admin,SuperAdmin")]
         public async Task<ActionResult<UserDTO>> GetUser(string id)
         {
             try
@@ -247,7 +219,7 @@ namespace DigitalTwin.API.Controllers
         /// Get all users (Admin only)
         /// </summary>
         [HttpGet("users")]
-        [RequirePermission(Permission.ManageUsers)]
+        [Authorize(Roles = "Admin,SuperAdmin")]
         public async Task<ActionResult<List<UserDTO>>> GetAllUsers()
         {
             try
@@ -292,7 +264,7 @@ namespace DigitalTwin.API.Controllers
         /// Assign role to user (Admin only)
         /// </summary>
         [HttpPost("users/{userId}/roles")]
-        [RequirePermission(Permission.ManageRoles)]
+        [Authorize(Roles = "Admin,SuperAdmin")]
         public async Task<ActionResult> AssignRole(string userId, [FromBody] AssignRoleRequest request)
         {
             try
@@ -373,7 +345,7 @@ namespace DigitalTwin.API.Controllers
         /// Grant permission to user (Admin only)
         /// </summary>
         [HttpPost("users/{userId}/permissions")]
-        [RequirePermission(Permission.ManageRoles)]
+        [Authorize(Roles = "Admin,SuperAdmin")]
         public async Task<ActionResult> GrantPermission(string userId, [FromBody] GrantPermissionRequest request)
         {
             try
@@ -391,7 +363,7 @@ namespace DigitalTwin.API.Controllers
         /// Revoke permission from user (Admin only)
         /// </summary>
         [HttpDelete("users/{userId}/permissions/{permission}")]
-        [RequirePermission(Permission.ManageRoles)]
+        [Authorize(Roles = "Admin,SuperAdmin")]
         public async Task<ActionResult> RevokePermission(string userId, Permission permission)
         {
             try
@@ -409,7 +381,7 @@ namespace DigitalTwin.API.Controllers
         /// Get all roles and their permissions (Admin only)
         /// </summary>
         [HttpGet("roles")]
-        [RequirePermission(Permission.ManageRoles)]
+        [Authorize(Roles = "Admin,SuperAdmin")]
         public async Task<ActionResult<Dictionary<UserRole, List<Permission>>>> GetAllRoles()
         {
             try
@@ -427,7 +399,7 @@ namespace DigitalTwin.API.Controllers
         /// Get security audit logs (Admin only)
         /// </summary>
         [HttpGet("audit-logs")]
-        [RequirePermission(Permission.ViewAuditLogs)]
+        [Authorize(Roles = "Admin,SuperAdmin")]
         public async Task<ActionResult<List<Core.Models.SecurityEvent>>> GetAuditLogs(
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 50,
@@ -473,7 +445,7 @@ namespace DigitalTwin.API.Controllers
         /// Export audit logs (Admin only)
         /// </summary>
         [HttpGet("audit-logs/export")]
-        [RequirePermission(Permission.ExportData)]
+        [Authorize(Roles = "Admin,SuperAdmin")]
         public async Task<ActionResult> ExportAuditLogs(
             [FromQuery] SecurityEventType? eventType = null,
             [FromQuery] string? userId = null,

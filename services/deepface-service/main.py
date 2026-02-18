@@ -14,8 +14,15 @@ import numpy as np
 import cv2
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import JSONResponse
 from pydantic import BaseModel
+import PIL
 from PIL import Image
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+PIL.Image.MAX_IMAGE_PIXELS = 25_000_000
 
 # DeepFace imports for real emotion detection
 try:
@@ -86,10 +93,28 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+SERVICE_API_KEY = os.getenv("SERVICE_API_KEY", "")
+
+
+@app.middleware("http")
+async def verify_api_key(request, call_next):
+    if request.url.path == "/health":
+        return await call_next(request)
+    if SERVICE_API_KEY:
+        api_key = request.headers.get("X-Service-Key")
+        if api_key != SERVICE_API_KEY:
+            return JSONResponse(status_code=401, content={"error": "Invalid API key"})
+    return await call_next(request)
+
+
 # CORS middleware for cross-origin requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:8080").split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -394,7 +419,7 @@ async def analyze_facial_expression(
 
     except Exception as e:
         logger.error(f"Error analyzing facial expression: {e}")
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.post("/analyze/emotion", response_model=EmotionalAnalysisResponse)
@@ -474,7 +499,7 @@ async def analyze_emotion(file: UploadFile = File(...)):
 
     except Exception as e:
         logger.error(f"Error in emotional analysis: {e}")
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.post("/analyze/batch")

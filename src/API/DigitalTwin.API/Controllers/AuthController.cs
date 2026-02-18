@@ -82,7 +82,7 @@ namespace DigitalTwin.API.Controllers
                     ExpiresIn = 3600, // 1 hour in seconds
                     User = new UserInfo
                     {
-                        Id = GetUserId(request.Username),
+                        UserId = GetUserId(request.Username),
                         Username = request.Username,
                         Roles = roles
                     }
@@ -159,7 +159,7 @@ namespace DigitalTwin.API.Controllers
                     RefreshToken = refreshToken,
                     User = new UserInfo
                     {
-                        Id = userId,
+                        UserId = userId,
                         Username = request.Username,
                         Roles = roles
                     }
@@ -285,19 +285,23 @@ namespace DigitalTwin.API.Controllers
             }
         }
 
-        // Helper methods (placeholder implementations)
+        // Helper methods — delegate to proper services in production
         private bool ValidateCredentials(string username, string password)
         {
-            // Placeholder credential validation
-            // In real implementation, verify against database with password hashing
-            var validCredentials = new Dictionary<string, string>
-            {
-                { "admin", "admin123" },
-                { "user", "user123" },
-                { "testuser", "SecurePassword123!" }
-            };
+            // TODO: Replace with AuthenticationService.AuthenticateUserAsync
+            // This is a placeholder that rejects all logins until the database is connected
+            if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
+                return false;
 
-            return validCredentials.TryGetValue(username, out var storedPassword) && storedPassword == password;
+            // In development mode, allow a single test account
+            // NEVER use hardcoded credentials in production
+            if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development")
+            {
+                var devPassword = Environment.GetEnvironmentVariable("DEV_TEST_PASSWORD") ?? "";
+                return username == "dev" && !string.IsNullOrEmpty(devPassword) && password == devPassword;
+            }
+
+            return false;
         }
 
         private List<string> GetUserRoles(string username)
@@ -420,6 +424,6 @@ namespace DigitalTwin.API.Controllers
     {
         public bool Valid { get; set; }
         public string Message { get; set; } = string.Empty;
-        public JwtAuthenticationService.UserInfo? User { get; set; }
+        public UserInfo? User { get; set; }
     }
 }

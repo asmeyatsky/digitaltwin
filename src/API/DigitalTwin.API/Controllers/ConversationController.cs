@@ -57,12 +57,13 @@ namespace DigitalTwin.API.Controllers
                     return Unauthorized("User not authenticated");
                 }
 
-                // Create conversation session
+                // Create conversation session with deterministic TwinId per user
                 var sessionId = Guid.NewGuid();
+                var twinId = Guid.Parse(userId.PadRight(32, '0').Substring(0, 32).Insert(8, "-").Insert(13, "-").Insert(18, "-").Insert(23, "-"));
                 var interaction = new AITwinInteraction
                 {
                     Id = sessionId,
-                    TwinId = Guid.NewGuid(), // This would be the AI Twin ID
+                    TwinId = twinId,
                     MessageType = "conversation_start",
                     Content = request.Message,
                     Timestamp = DateTime.UtcNow,
@@ -122,11 +123,12 @@ namespace DigitalTwin.API.Controllers
                 // Generate AI response using LLM service (placeholder for now)
                 var aiResponse = await GenerateAIResponseAsync(request.Message, detectedEmotion);
 
-                // Store interaction
+                // Store interaction with consistent TwinId per user
+                var twinId = Guid.Parse(userId.PadRight(32, '0').Substring(0, 32).Insert(8, "-").Insert(13, "-").Insert(18, "-").Insert(23, "-"));
                 var interaction = new AITwinInteraction
                 {
                     Id = Guid.NewGuid(),
-                    TwinId = Guid.NewGuid(), // This would be the AI Twin ID
+                    TwinId = twinId,
                     MessageType = "user_message",
                     Content = request.Message,
                     Timestamp = DateTime.UtcNow,
@@ -203,10 +205,17 @@ namespace DigitalTwin.API.Controllers
                     MessageType = i.MessageType
                 }).ToList();
 
+                // Get total count for proper pagination
+                var totalCount = await _context.AITwinInteractions
+                    .Where(i => i.Context.ContainsKey("conversation_id") &&
+                                i.Context.ContainsKey("user_id") &&
+                                i.Context["user_id"].ToString() == userId)
+                    .CountAsync();
+
                 return Ok(new ConversationHistoryResponse
                 {
                     Messages = history,
-                    TotalCount = interactions.Count,
+                    TotalCount = totalCount,
                     Page = page,
                     PageSize = pageSize
                 });
@@ -267,8 +276,8 @@ namespace DigitalTwin.API.Controllers
         {
             try
             {
-                var client = _httpClientFactory.CreateClient();
-                var response = await client.PostAsJsonAsync("http://localhost:8001/detect-emotion", 
+                var client = _httpClientFactory.CreateClient("DeepFace");
+                var response = await client.PostAsJsonAsync("/detect-emotion",
                     new { text = message });
                 
                 if (response.IsSuccessStatusCode)
@@ -296,8 +305,8 @@ namespace DigitalTwin.API.Controllers
         {
             try
             {
-                var client = _httpClientFactory.CreateClient();
-                var response = await client.PostAsJsonAsync("http://localhost:8002/generate-response",
+                var client = _httpClientFactory.CreateClient("LLM");
+                var response = await client.PostAsJsonAsync("/generate-response",
                     new 
                     { 
                         message = userMessage,
@@ -338,10 +347,14 @@ namespace DigitalTwin.API.Controllers
             {
                 "happy" => EmotionalTone.Happy,
                 "excited" => EmotionalTone.Excited,
-                "sad" => EmotionalTone.Neutral,
-                "angry" => EmotionalTone.Frustrated,
+                "sad" or "depressed" => EmotionalTone.Sad,
+                "angry" or "frustrated" => EmotionalTone.Frustrated,
                 "anxious" or "worried" => EmotionalTone.Concerned,
                 "curious" => EmotionalTone.Curious,
+                "surprised" or "surprise" => EmotionalTone.Excited,
+                "fear" or "scared" => EmotionalTone.Concerned,
+                "disgust" => EmotionalTone.Frustrated,
+                "calm" or "relaxed" => EmotionalTone.Calm,
                 _ => EmotionalTone.Neutral
             };
         }
@@ -350,9 +363,11 @@ namespace DigitalTwin.API.Controllers
         {
             return userEmotion.ToLower() switch
             {
-                "sad" or "angry" => EmotionalTone.Concerned,
+                "sad" or "depressed" => EmotionalTone.Concerned,
+                "angry" or "frustrated" => EmotionalTone.Calm,
                 "happy" or "excited" => EmotionalTone.Happy,
                 "anxious" or "worried" => EmotionalTone.Calm,
+                "fear" or "scared" => EmotionalTone.Concerned,
                 _ => EmotionalTone.Neutral
             };
         }
@@ -361,6 +376,8 @@ namespace DigitalTwin.API.Controllers
     // DTOs
     public class ConversationStartRequest
     {
+        [Required]
+        [StringLength(5000, MinimumLength = 1)]
         public string Message { get; set; } = string.Empty;
     }
 
@@ -374,7 +391,11 @@ namespace DigitalTwin.API.Controllers
 
     public class ConversationMessageRequest
     {
+        [Required]
         public Guid ConversationId { get; set; }
+
+        [Required]
+        [StringLength(5000, MinimumLength = 1)]
         public string Message { get; set; } = string.Empty;
     }
 

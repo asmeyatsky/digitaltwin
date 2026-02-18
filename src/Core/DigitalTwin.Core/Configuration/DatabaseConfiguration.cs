@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using DigitalTwin.Core.Data;
@@ -42,7 +43,7 @@ namespace DigitalTwin.Core.Configuration
                 #endif
 
                 // Configure query tracking behavior
-                options.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
+                options.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
             });
 
             return services;

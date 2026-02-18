@@ -18,8 +18,9 @@ services:
       - JwtConfiguration__Audience=DigitalTwin
       - JwtConfiguration__ExpiryInMinutes=60
       - Redis__ConnectionString=redis:${REDIS_PORT:-6379},password=${REDIS_PASSWORD}
-      - RabbitMQ__ConnectionString=amqp://guest:guest@rabbitmq:5672
+      - RabbitMQ__ConnectionString=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/digitaltwin
       - DeepFace__BaseUrl=http://deepface:8001
+      - Services__LLM__BaseUrl=http://llm-service:8004
     depends_on:
       - postgres
       - redis
@@ -55,7 +56,7 @@ services:
       - digitaltwin-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dtadmin -d digitaltwin"]
+      test: ["CMD-SHELL", "pg_isready -U $${DB_USER:-postgres} -d $${DB_NAME:-digitaltwin}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -90,6 +91,7 @@ services:
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
       - RABBITMQ_DEFAULT_VHOST=digitaltwin
     # Internal service - management port only for development
+    ports:
       - "15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
@@ -122,10 +124,9 @@ services:
 
   # Prometheus Monitoring
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.51.0
     container_name: digitaltwin-prometheus
-    ports:
-      - "9090:9090"
+    # Internal service - no host port mapping needed
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
@@ -140,10 +141,9 @@ services:
 
   # Grafana Dashboard
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:10.4.0
     container_name: digitaltwin-grafana
-    ports:
-      - "3000:3000"
+    # Internal service - no host port mapping needed
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
       - GF_USERS_ALLOW_SIGN_UP=false
@@ -164,8 +164,7 @@ services:
       - discovery.type=single-node
       - xpack.security.enabled=false
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-    ports:
-      - "9200:9200"
+    # Internal service - no host port mapping needed
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     networks:
@@ -176,8 +175,7 @@ services:
   kibana:
     image: docker.elastic.co/kibana/kibana:8.5.0
     container_name: digitaltwin-kibana
-    ports:
-      - "5601:5601"
+    # Internal service - no host port mapping needed
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
     depends_on:
@@ -201,11 +199,9 @@ services:
 
   # Jaeger Distributed Tracing
   jaeger:
-    image: jaegertracing/all-in-one:latest
+    image: jaegertracing/all-in-one:1.55
     container_name: digitaltwin-jaeger
-    ports:
-      - "16686:16686"
-      - "14268:14268"
+    # Internal service - no host port mapping needed
     environment:
       - COLLECTOR_OTLP_ENABLED=true
     networks:
@@ -214,11 +210,9 @@ services:
 
   # MinIO Object Storage
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2024-03-15T01-07-19Z
     container_name: digitaltwin-minio
-    ports:
-      - "9000:9000"
-      - "9001:9001"
+    # Internal service - no host port mapping needed
     environment:
       - MINIO_ROOT_USER=${MINIO_ROOT_USER}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
@@ -304,6 +298,27 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/health')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+
+  # LLM Service (Empathetic Response Generation)
+  llm-service:
+    build:
+      context: ./services/llm-service
+      dockerfile: Dockerfile
+    container_name: digitaltwin-llm
+    ports:
+      - "8004:8004"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    networks:
+      - digitaltwin-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8004/health')"]
       interval: 30s
       timeout: 10s
       start_period: 10s

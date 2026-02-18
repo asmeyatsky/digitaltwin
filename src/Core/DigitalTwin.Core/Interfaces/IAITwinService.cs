@@ -95,6 +95,26 @@ namespace DigitalTwin.Core.Interfaces
         /// Gets AI twin health status
         /// </summary>
         Task<AITwinHealthStatus> GetTwinHealthStatusAsync(Guid twinId);
+
+        /// <summary>
+        /// Initializes a user session
+        /// </summary>
+        Task InitializeUserSessionAsync(string userId);
+
+        /// <summary>
+        /// Ends a user session
+        /// </summary>
+        Task EndUserSessionAsync(string userId);
+
+        /// <summary>
+        /// Generates a response for a user message with context
+        /// </summary>
+        Task<string> GenerateResponseAsync(string userId, string message, Dictionary<string, object> context);
+
+        /// <summary>
+        /// Generates a greeting for a user
+        /// </summary>
+        Task<string> GenerateGreetingAsync(string userId);
     }
 
     /// <summary>
@@ -232,6 +252,8 @@ namespace DigitalTwin.Core.Interfaces
         Task<Sensor> UpdateAsync(Sensor sensor);
         Task<bool> DeleteAsync(Guid id);
         Task<List<SensorReading>> GetReadingsAsync(Guid sensorId, DateTime? start = null, DateTime? end = null);
+        Task<IEnumerable<Sensor>> GetByBuildingAndTypeAsync(Guid buildingId, SensorType type);
+        Task<IEnumerable<Sensor>> GetByBuildingAsync(Guid buildingId);
     }
 
     /// <summary>
@@ -244,6 +266,7 @@ namespace DigitalTwin.Core.Interfaces
         public double Value { get; set; }
         public string Unit { get; set; }
         public DateTime Timestamp { get; set; }
+        public SensorType SensorType { get; set; }
         public Dictionary<string, object> Metadata { get; set; } = new();
     }
 
@@ -256,5 +279,6 @@ namespace DigitalTwin.Core.Interfaces
         Task<SensorReading> GetLatestReadingAsync(Guid sensorId);
         Task<bool> StartCollectionAsync(Guid buildingId);
         Task<bool> StopCollectionAsync(Guid buildingId);
+        Task<IEnumerable<SensorReading>> GetSensorReadingsAsync(Guid sensorId, DateTime startDate, DateTime endDate);
     }
 }

@@ -12,10 +12,12 @@ metadata:
   namespace: digitaltwin
 type: Opaque
 data:
-  # Base64 encoded secrets - replace with actual encoded values
-  database-connection: SG9zdD1wb3N0Z3Jlc3FsaTtkYXRhbHR3aW46dXNlcj1kdGFkbWluO3Bhc3N3b3JkPXNlY3VyZVBhc3N3b3JkMTIzIQ==
-  jwt-secret: VGhpc0lzQVZlcnlMb25nU2VjcmV0S2V5Rm9ySlRXVG9rZW5HZW5lcmF0aW9uUHVycG9zZXMxMjM0NTY3ODkwMTIzNDU2Nzg5MA==
-  rabbitmq-connection: YW1xcDovZ3Vlc3Q6Z3Vlc3RAcmFiYml0bXF6NTY3Mg==
+  # IMPORTANT: Replace with SealedSecrets or external secret manager values
+  database-connection: REPLACE_WITH_SEALED_SECRET
+  jwt-secret: REPLACE_WITH_SEALED_SECRET
+  rabbitmq-connection: REPLACE_WITH_SEALED_SECRET
+  postgres-password: REPLACE_WITH_SEALED_SECRET
+  rabbitmq-password: REPLACE_WITH_SEALED_SECRET
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -34,6 +36,9 @@ spec:
       labels:
         app: digitaltwin-postgres
     spec:
+      securityContext:
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
       containers:
       - name: postgres
         image: postgres:15-alpine
@@ -113,6 +118,9 @@ spec:
       labels:
         app: digitaltwin-redis
     spec:
+      securityContext:
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
       containers:
       - name: redis
         image: redis:7-alpine
@@ -128,6 +136,8 @@ spec:
         volumeMounts:
         - name: redis-storage
           mountPath: /data
+        - name: redis-config
+          mountPath: /etc/redis
         command:
         - redis-server
         - /etc/redis/redis.conf
@@ -184,6 +194,9 @@ spec:
       labels:
         app: digitaltwin-rabbitmq
     spec:
+      securityContext:
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
       containers:
       - name: rabbitmq
         image: rabbitmq:3-management-alpine
@@ -302,7 +315,7 @@ data:
     repl-diskless-sync-delay 5
     masterauth ""
     slave-announce-ip ""
-    requirepass ""
+    requirepass "REPLACE_WITH_REDIS_PASSWORD"
     rename-command FLUSH ""
     rename-command CONFIG ""
     rename-command DEBUG ""

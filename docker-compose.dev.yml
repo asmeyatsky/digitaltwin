@@ -24,9 +24,9 @@ services:
     image: postgres:15-alpine
     container_name: digitaltwin-postgres-dev
     environment:
-      - POSTGRES_DB=digitaltwin_dev
-      - POSTGRES_USER=devuser
-      - POSTGRES_PASSWORD=devpass123
+      - POSTGRES_DB=${DB_NAME:-digitaltwin_dev}
+      - POSTGRES_USER=${DB_USER:-devuser}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
     ports:
       - "5433:5432"
     volumes:
@@ -50,9 +50,9 @@ services:
     image: postgres:15-alpine
     container_name: digitaltwin-postgres-test
     environment:
-      - POSTGRES_DB=digitaltwin_test
-      - POSTGRES_USER=testuser
-      - POSTGRES_PASSWORD=testpass123
+      - POSTGRES_DB=${TEST_DB_NAME:-digitaltwin_test}
+      - POSTGRES_USER=${TEST_DB_USER:-testuser}
+      - POSTGRES_PASSWORD=${TEST_DB_PASSWORD}
     ports:
       - "5434:5432"
     volumes:

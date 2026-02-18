@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using DigitalTwin.Core.DTOs;
 using DigitalTwin.Core.Interfaces;
 using DigitalTwin.Core.Entities;
-using DigitalTwin.Core.ValueObjects;
 
 namespace DigitalTwin.Core.Services
 {
@@ -263,7 +263,7 @@ namespace DigitalTwin.Core.Services
             }
 
             operationalKPIs.TotalEquipment = allEquipment.Count;
-            operationalKPIs.ActiveEquipment = allEquipment.Count(e => e.Status == Status.Operational);
+            operationalKPIs.ActiveEquipment = allEquipment.Count(e => e.Status == EquipmentStatus.Operational);
             operationalKPIs.EquipmentUptime = CalculateEquipmentUptime(allEquipment, dateRange);
             operationalKPIs.SystemAvailability = operationalKPIs.EquipmentUptime / 100.0;
             operationalKPIs.ResponseTime = 2.5; // Mock response time in minutes
@@ -407,7 +407,7 @@ namespace DigitalTwin.Core.Services
         {
             if (!equipment.Any()) return 0;
             
-            var operationalCount = equipment.Count(e => e.Status == Status.Operational);
+            var operationalCount = equipment.Count(e => e.Status == EquipmentStatus.Operational);
             return (operationalCount / (double)equipment.Count) * 100;
         }
 
@@ -508,7 +508,7 @@ namespace DigitalTwin.Core.Services
             {
                 NextDayPeakOccupancy = 85.5,
                 NextWeekAverageOccupancy = 78.2,
-                NextMonthOccupancyTrend = "Stable",
+                NextMonthOccupancyTrend = 0.0, // Stable trend
                 SeasonalPattern = "Higher occupancy expected in summer months",
                 Confidence = 0.82
             };
@@ -524,6 +524,99 @@ namespace DigitalTwin.Core.Services
                 NextYearOperationalCost = 75000.0,
                 CostTrend = "Increasing",
                 SavingsOpportunities = new List<string> { "Optimize HVAC schedule", "Upgrade lighting to LED", "Implement smart controls" }
+            };
+        }
+
+        /// <summary>
+        /// Gets real-time dashboard data
+        /// </summary>
+        public async Task<DashboardData> GetDashboardDataAsync(Guid buildingId, DashboardConfiguration config)
+        {
+            await Task.CompletedTask;
+            return new DashboardData
+            {
+                BuildingId = buildingId,
+                GeneratedAt = DateTime.UtcNow,
+                Widgets = new List<WidgetData>(),
+                ActiveAlerts = new List<DashboardAlert>(),
+                SummaryKPIs = new SummaryKPIs()
+            };
+        }
+
+        /// <summary>
+        /// Gets energy analytics
+        /// </summary>
+        public async Task<EnergyAnalytics> GetEnergyAnalyticsAsync(Guid buildingId, DateTime startDate, DateTime endDate)
+        {
+            await Task.CompletedTask;
+            return new EnergyAnalytics
+            {
+                ConsumptionData = new List<EnergyConsumptionData>(),
+                CostBreakdown = new EnergyCostBreakdown(),
+                EfficiencyMetrics = new EnergyEfficiencyMetrics(),
+                Anomalies = new List<EnergyAnomaly>(),
+                Benchmarking = new EnergyBenchmarking()
+            };
+        }
+
+        /// <summary>
+        /// Gets environmental analytics
+        /// </summary>
+        public async Task<EnvironmentalAnalytics> GetEnvironmentalAnalyticsAsync(Guid buildingId, DateTime startDate, DateTime endDate)
+        {
+            await Task.CompletedTask;
+            return new EnvironmentalAnalytics
+            {
+                TemperatureData = new List<TemperatureData>(),
+                HumidityData = new List<HumidityData>(),
+                AirQualityData = new List<AirQualityData>(),
+                ComfortAnalytics = new ComfortAnalytics(),
+                Compliance = new EnvironmentalCompliance()
+            };
+        }
+
+        /// <summary>
+        /// Gets operational analytics
+        /// </summary>
+        public async Task<OperationalAnalytics> GetOperationalAnalyticsAsync(Guid buildingId, DateTime startDate, DateTime endDate)
+        {
+            await Task.CompletedTask;
+            return new OperationalAnalytics
+            {
+                EquipmentPerformance = new List<EquipmentPerformance>(),
+                Availability = new SystemAvailability(),
+                Alerts = new List<OperationalAlert>(),
+                PerformanceMetrics = new PerformanceMetrics()
+            };
+        }
+
+        /// <summary>
+        /// Gets maintenance analytics
+        /// </summary>
+        public async Task<MaintenanceAnalytics> GetMaintenanceAnalyticsAsync(Guid buildingId, DateTime startDate, DateTime endDate)
+        {
+            await Task.CompletedTask;
+            return new MaintenanceAnalytics
+            {
+                WorkOrders = new List<MaintenanceWorkOrder>(),
+                Metrics = new MaintenanceMetrics(),
+                Costs = new List<MaintenanceCost>(),
+                PredictiveMaintenance = new PredictiveMaintenance()
+            };
+        }
+
+        /// <summary>
+        /// Gets occupancy analytics
+        /// </summary>
+        public async Task<OccupancyAnalytics> GetOccupancyAnalyticsAsync(Guid buildingId, DateTime startDate, DateTime endDate)
+        {
+            await Task.CompletedTask;
+            return new OccupancyAnalytics
+            {
+                OccupancyData = new List<OccupancyData>(),
+                Utilization = new SpaceUtilization(),
+                Patterns = new OccupancyPatterns(),
+                Forecast = new OccupancyForecast()
             };
         }
 

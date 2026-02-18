@@ -1,12 +1,12 @@
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using DigitalTwin.Core.DTOs;
 using DigitalTwin.Core.Entities;
 using DigitalTwin.Core.Enums;
 using DigitalTwin.Core.Interfaces;
-using DigitalTwin.Infrastructure.Services;
 
 namespace DigitalTwin.Core.Services
 {
@@ -42,7 +42,7 @@ namespace DigitalTwin.Core.Services
                 var session = new ConversationSession
                 {
                     Id = Guid.NewGuid(),
-                    UserId = userId,
+                    UserId = userId.ToString(),
                     StartedAt = DateTime.UtcNow,
                     IsActive = true,
                     CurrentEmotionalState = EmotionType.Neutral,
@@ -56,7 +56,7 @@ namespace DigitalTwin.Core.Services
                 var emotionalTrend = await _emotionalStateService.AnalyzeEmotionalTrendsAsync(userId, TimeSpan.FromDays(7));
                 
                 // Initialize AI twin with user context
-                await _aiTwinService.InitializeUserSessionAsync(userId, userMemories, emotionalTrend);
+                await _aiTwinService.InitializeUserSessionAsync(userId.ToString());
                 
                 // Generate initial response if message provided
                 ConversationResponse response;
@@ -75,7 +75,7 @@ namespace DigitalTwin.Core.Services
                 {
                     var initialMemory = new EmotionalMemory
                     {
-                        UserId = userId,
+                        UserId = userId.ToString(),
                         Description = initialMessage,
                         PrimaryEmotion = response.DetectedEmotion,
                         Intensity = response.EmotionalIntensity,
@@ -125,47 +125,51 @@ namespace DigitalTwin.Core.Services
                 var relevantMemories = await _emotionalStateService.GetRelevantMemoriesAsync(userId, message, 10);
                 
                 // Generate AI response with emotional context
-                var aiResponse = await _aiTwinService.GenerateResponseAsync(
-                    userId, 
-                    message, 
-                    session.CurrentEmotionalState,
-                    relevantMemories
+                var context = new Dictionary<string, object>
+                {
+                    { "currentEmotion", session.CurrentEmotionalState.ToString() },
+                    { "relevantMemories", relevantMemories.Count }
+                };
+                var aiResponseText = await _aiTwinService.GenerateResponseAsync(
+                    userId.ToString(),
+                    message,
+                    context
                 );
-                
+
                 // Analyze emotional content of message
                 var detectedEmotion = AnalyzeMessageEmotion(message);
                 session.CurrentEmotionalState = detectedEmotion;
-                
+
                 // Store conversation memory
                 var memory = new EmotionalMemory
                 {
-                    UserId = userId,
+                    UserId = userId.ToString(),
                     Description = message,
                     PrimaryEmotion = detectedEmotion,
-                    Intensity = aiResponse.EmotionalIntensity,
+                    Intensity = 0.7, // Default intensity
                     CreatedAt = DateTime.UtcNow,
                     ImportanceScore = CalculateMessageImportance(message, detectedEmotion),
                     AssociatedEmotions = new List<EmotionType> { detectedEmotion },
                     EmotionTags = ExtractEmotionTags(message, detectedEmotion)
                 };
-                
+
                 await _emotionalStateService.StoreEmotionalMemoryAsync(memory);
-                
+
                 // Update session context
                 session.MessageCount++;
                 session.LastMessageAt = DateTime.UtcNow;
                 session.ConversationContext["last_emotion"] = detectedEmotion;
                 session.ConversationContext["message_count"] = session.MessageCount;
-                
+
                 // Create response
                 var response = new ConversationResponse
                 {
                     Success = true,
-                    Response = aiResponse.Response,
+                    Response = aiResponseText,
                     DetectedEmotion = detectedEmotion,
-                    EmotionalIntensity = aiResponse.EmotionalIntensity,
-                    PersonalizationLevel = aiResponse.PersonalizationLevel,
-                    MemoryReferences = aiResponse.MemoryReferences,
+                    EmotionalIntensity = 0.7,
+                    PersonalizationLevel = 0.5,
+                    MemoryReferences = new List<string>(),
                     ResponseTime = DateTime.UtcNow,
                     SessionId = session.Id
                 };
@@ -200,7 +204,7 @@ namespace DigitalTwin.Core.Services
                     // Store conversation summary memory
                     var summaryMemory = new EmotionalMemory
                     {
-                        UserId = userId,
+                        UserId = userId.ToString(),
                         Description = $"Conversation ended after {session.MessageCount} messages",
                         PrimaryEmotion = session.CurrentEmotionalState,
                         Intensity = 0.5, // Neutral intensity for summary
@@ -215,7 +219,7 @@ namespace DigitalTwin.Core.Services
                     _activeSessions.Remove(userId);
                     
                     // Clean up AI twin session
-                    await _aiTwinService.EndUserSessionAsync(userId);
+                    await _aiTwinService.EndUserSessionAsync(userId.ToString());
                     
                     _logger.LogInformation("Conversation ended successfully for user {UserId}", userId);
                     return true;
@@ -250,24 +254,24 @@ namespace DigitalTwin.Core.Services
             }
         }
         
-        public async Task<List<ConversationMemory>> GetConversationMemoriesAsync(Guid userId, int limit = 50)
+        public async Task<List<EmotionalMemory>> GetConversationMemoriesAsync(Guid userId, int limit = 50)
         {
             try
             {
                 var memories = await _emotionalStateService.GetUserMemoriesAsync(userId, limit);
-                
+
                 // Filter for conversation-related memories
                 var conversationMemories = memories
-                    .Where(m => m.EmotionTags.Any(tag => tag.Contains("conversation") || tag.Contains("message")))
+                    .Where(m => m.EmotionTags != null && m.EmotionTags.Any(tag => tag.Contains("conversation") || tag.Contains("message")))
                     .OrderByDescending(m => m.CreatedAt)
                     .ToList();
-                
+
                 return conversationMemories;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting conversation memories for user {UserId}: {Error}", userId, ex.Message);
-                return new List<ConversationMemory>();
+                return new List<EmotionalMemory>();
             }
         }
         
@@ -276,15 +280,15 @@ namespace DigitalTwin.Core.Services
             try
             {
                 // Generate personalized greeting based on user's emotional state
-                var greeting = await _aiTwinService.GenerateGreetingAsync(userId, emotionalTrend);
-                
+                var greetingText = await _aiTwinService.GenerateGreetingAsync(userId.ToString());
+
                 return new ConversationResponse
                 {
                     Success = true,
-                    Response = greeting.Response,
+                    Response = greetingText,
                     DetectedEmotion = EmotionType.Happy, // Greetings are typically positive
                     EmotionalIntensity = 0.7,
-                    PersonalizationLevel = greeting.PersonalizationLevel,
+                    PersonalizationLevel = 0.5,
                     ResponseTime = DateTime.UtcNow
                 };
             }
@@ -387,6 +391,6 @@ namespace DigitalTwin.Core.Services
         Task<ConversationResponse> ProcessMessageAsync(Guid userId, string message);
         Task<bool> EndConversationAsync(Guid userId);
         Task<ConversationSession> GetActiveSessionAsync(Guid userId);
-        Task<List<ConversationMemory>> GetConversationMemoriesAsync(Guid userId, int limit = 50);
+        Task<List<EmotionalMemory>> GetConversationMemoriesAsync(Guid userId, int limit = 50);
     }
 }

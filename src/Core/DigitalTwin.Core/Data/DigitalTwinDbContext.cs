@@ -40,6 +40,9 @@ namespace DigitalTwin.Core.Data
         public DbSet<Equipment> Equipment { get; set; }
         public DbSet<Sensor> Sensors { get; set; }
 
+        // Emotional Entities
+        public DbSet<EmotionalMemory> EmotionalMemories { get; set; }
+
         // Security Entities (simplified for now)
         // public DbSet<UserSession> UserSessions { get; set; }
         // public DbSet<SecurityEvent> SecurityEvents { get; set; }
@@ -172,7 +175,6 @@ namespace DigitalTwin.Core.Data
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
                 entity.Property(e => e.Type).HasMaxLength(100);
-                entity.Property(e => e.Status).HasMaxLength(50);
                 entity.HasOne<Room>().WithMany(r => r.Equipment).HasForeignKey(e => e.RoomId);
             });
 
@@ -191,7 +193,9 @@ namespace DigitalTwin.Core.Data
                 .HasIndex(e => e.UserId);
 
             modelBuilder.Entity<AITwinInteraction>()
-                .HasIndex(e => e.TwinId)
+                .HasIndex(e => e.TwinId);
+
+            modelBuilder.Entity<AITwinInteraction>()
                 .HasIndex(e => e.Timestamp);
         }
     }

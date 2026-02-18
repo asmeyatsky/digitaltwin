@@ -58,7 +58,7 @@ namespace DigitalTwin.Core.Interfaces
         /// <summary>
         /// Gets export status
         /// </summary>
-        Task<ExportStatus> GetExportStatusAsync(Guid exportId);
+        Task<ExportStatusInfo> GetExportStatusAsync(Guid exportId);
 
         /// <summary>
         /// Cancels an export job
@@ -230,7 +230,7 @@ namespace DigitalTwin.Core.Interfaces
         public DateTime GeneratedAt { get; set; }
         public long FileSize { get; set; }
         public string GeneratedBy { get; set; }
-        public ExportStatus Status { get; set; }
+        public ExportJobStatus Status { get; set; }
         public string ErrorMessage { get; set; }
         public int DownloadCount { get; set; }
         public DateTime? LastDownloadedAt { get; set; }
@@ -399,9 +399,9 @@ namespace DigitalTwin.Core.Interfaces
     }
 
     /// <summary>
-    /// Export status
+    /// Export status info (renamed from ExportStatus to avoid collision with enum)
     /// </summary>
-    public class ExportStatus
+    public class ExportStatusInfo
     {
         public Guid Id { get; set; }
         public ExportJobStatus Status { get; set; }

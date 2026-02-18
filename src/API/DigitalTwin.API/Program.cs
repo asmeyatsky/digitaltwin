@@ -2,47 +2,30 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using DigitalTwin.Core.Data;
-using DigitalTwin.API.Controllers;
+using DigitalTwin.Core.Security;
+using DigitalTwin.Core.Interfaces;
+using DigitalTwin.Core.Services;
 using System.Text;
 
 namespace DigitalTwin.API
 {
-    /// <summary>
-    /// Digital Twin Emotional Companion API
-    /// 
-    /// Architectural Intent:
-    /// - Provides RESTful API for emotional companion system
-    /// - Integrates with ML services for emotion detection and conversation
-    /// - Supports JWT authentication and authorization
-    /// - Enables real-time conversational AI interactions
-    /// 
-    /// Key Features:
-    /// 1. JWT-based authentication
-    /// 2. Emotional conversation endpoints
-    /// 3. Integration with external ML services
-    /// 4. Comprehensive error handling
-    /// 5. OpenAPI/Swagger documentation
-    /// </summary>
     public class Program
     {
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
 
-            // Add services to the container
             builder.Services.AddControllers();
-            
-            // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(c =>
             {
-                c.SwaggerDoc("v1", new() { 
-                    Title = "Digital Twin Emotional Companion API", 
+                c.SwaggerDoc("v1", new()
+                {
+                    Title = "Digital Twin Emotional Companion API",
                     Version = "v1",
                     Description = "RESTful API for emotional companion AI system with real-time emotion detection and conversation capabilities"
                 });
-                
-                // Include XML Comments
+
                 var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
                 var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
                 if (File.Exists(xmlPath))
@@ -50,7 +33,6 @@ namespace DigitalTwin.API
                     c.IncludeXmlComments(xmlPath);
                 }
 
-                // Add JWT Authentication to Swagger
                 c.AddSecurityDefinition("Bearer", new()
                 {
                     Description = "JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\"",
@@ -72,17 +54,25 @@ namespace DigitalTwin.API
                 });
             });
 
-            // Add Database Context
-            var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL") 
+            // Database — use standardized env var with fallback
+            var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
+                ?? builder.Configuration.GetConnectionString("DefaultConnection")
                 ?? "Host=localhost;Database=digitaltwin;Username=postgres;Password=password";
-            
+
             builder.Services.AddDbContext<DigitalTwinDbContext>(options =>
                 options.UseNpgsql(connectionString));
 
-            // Add JWT Authentication
-            var jwtKey = Environment.GetEnvironmentVariable("JWT_KEY") 
+            // JWT Authentication — standardized env vars
+            var jwtKey = Environment.GetEnvironmentVariable("JwtConfiguration__SecretKey")
+                ?? builder.Configuration["JwtConfiguration:SecretKey"]
                 ?? "ThisIsASecretKeyForDevelopmentUseOnly123456789012345678901234567890";
-            
+            var jwtIssuer = Environment.GetEnvironmentVariable("JwtConfiguration__Issuer")
+                ?? builder.Configuration["JwtConfiguration:Issuer"]
+                ?? "DigitalTwin";
+            var jwtAudience = Environment.GetEnvironmentVariable("JwtConfiguration__Audience")
+                ?? builder.Configuration["JwtConfiguration:Audience"]
+                ?? "DigitalTwin";
+
             builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 .AddJwtBearer(options =>
                 {
@@ -92,52 +82,91 @@ namespace DigitalTwin.API
                         ValidateAudience = true,
                         ValidateLifetime = true,
                         ValidateIssuerSigningKey = true,
-                        ValidIssuer = Environment.GetEnvironmentVariable("JWT_ISSUER") ?? "DigitalTwinAPI",
-                        ValidAudience = Environment.GetEnvironmentVariable("JWT_AUDIENCE") ?? "DigitalTwinClients",
+                        ValidIssuer = jwtIssuer,
+                        ValidAudience = jwtAudience,
                         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
                     };
                 });
 
             builder.Services.AddAuthorization();
 
-            // Add HttpClient for external service calls
+            // HttpClient with named clients and timeouts
+            builder.Services.AddHttpClient("DeepFace", client =>
+            {
+                var baseUrl = Environment.GetEnvironmentVariable("Services__DeepFace__BaseUrl") ?? "http://localhost:8001";
+                client.BaseAddress = new Uri(baseUrl);
+                client.Timeout = TimeSpan.FromSeconds(30);
+            });
+            builder.Services.AddHttpClient("LLM", client =>
+            {
+                var baseUrl = Environment.GetEnvironmentVariable("Services__LLM__BaseUrl") ?? "http://localhost:8004";
+                client.BaseAddress = new Uri(baseUrl);
+                client.Timeout = TimeSpan.FromSeconds(30);
+            });
+            builder.Services.AddHttpClient("Avatar", client =>
+            {
+                var baseUrl = Environment.GetEnvironmentVariable("Services__Avatar__BaseUrl") ?? "http://localhost:8002";
+                client.BaseAddress = new Uri(baseUrl);
+                client.Timeout = TimeSpan.FromSeconds(60);
+            });
+            builder.Services.AddHttpClient("Voice", client =>
+            {
+                var baseUrl = Environment.GetEnvironmentVariable("Services__Voice__BaseUrl") ?? "http://localhost:8003";
+                client.BaseAddress = new Uri(baseUrl);
+                client.Timeout = TimeSpan.FromSeconds(60);
+            });
             builder.Services.AddHttpClient();
-            
-            // Add JWT Authentication Service
-            builder.Services.AddSingleton<API.Services.JwtAuthenticationService>();
 
-            // Add CORS
+            // Core services
+            builder.Services.AddSingleton<API.Services.JwtAuthenticationService>();
+            builder.Services.AddScoped<PasswordHasher>();
+            builder.Services.AddScoped<AuthenticationService>();
+            builder.Services.AddScoped<RoleBasedAccessControlService>();
+            builder.Services.AddScoped<SecurityEventLogger>();
+            builder.Services.AddScoped<IAITwinService, AITwinService>();
+            builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
+            builder.Services.AddScoped<IPredictiveAnalyticsService, PredictiveAnalyticsService>();
+            builder.Services.AddScoped<IAlertService, AlertService>();
+            builder.Services.AddScoped<IReportService, ReportService>();
+            builder.Services.AddScoped<IExportService, ExportService>();
+            builder.Services.AddScoped<IWebhookService, WebhookService>();
+            builder.Services.AddScoped<IConversationService, ConversationService>();
+            builder.Services.AddScoped<IEmotionalStateService, EmotionalStateService>();
+
+            // CORS — restrict in production
+            var allowedOrigins = Environment.GetEnvironmentVariable("CORS__AllowedOrigins")?.Split(',')
+                ?? new[] { "http://localhost:3000", "http://localhost:8081", "http://localhost:19006" };
+
             builder.Services.AddCors(options =>
             {
-                options.AddPolicy("AllowAll", builder =>
+                options.AddPolicy("Default", policy =>
                 {
-                    builder.AllowAnyOrigin()
-                           .AllowAnyMethod()
-                           .AllowAnyHeader();
+                    policy.WithOrigins(allowedOrigins)
+                          .AllowAnyMethod()
+                          .AllowAnyHeader()
+                          .AllowCredentials();
                 });
             });
 
             var app = builder.Build();
 
-            // Configure the HTTP request pipeline
             if (app.Environment.IsDevelopment())
             {
                 app.UseSwagger();
                 app.UseSwaggerUI(c =>
                 {
                     c.SwaggerEndpoint("/swagger/v1/swagger.json", "Digital Twin Emotional Companion API v1");
-                    c.RoutePrefix = string.Empty; // Serve Swagger at root
+                    c.RoutePrefix = string.Empty;
                 });
             }
 
             app.UseHttpsRedirection();
-            app.UseCors("AllowAll");
+            app.UseCors("Default");
             app.UseAuthentication();
             app.UseAuthorization();
 
             app.MapControllers();
 
-            // Add health check endpoint
             app.MapGet("/health", () => new
             {
                 status = "healthy",
@@ -146,7 +175,6 @@ namespace DigitalTwin.API
                 version = "1.0.0"
             });
 
-            // Add API info endpoint
             app.MapGet("/", () => new
             {
                 name = "Digital Twin Emotional Companion API",

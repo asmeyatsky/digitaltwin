@@ -17,7 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../Core/DigitalTwin.Core/DigitalTwin.Core.csproj" />
+    <ProjectReference Include="../../Core/DigitalTwin.Core/DigitalTwin.Core.csproj" />
   </ItemGroup>
 
 </Project>

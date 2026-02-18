@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using DigitalTwin.Core.Interfaces;
 
 namespace DigitalTwin.Core.DTOs
 {
@@ -271,7 +272,7 @@ namespace DigitalTwin.Core.DTOs
         public Guid TemplateId { get; set; }
         public Guid UserId { get; set; }
         public List<string> EmailAddresses { get; set; }
-        public List<NotificationChannel> NotificationChannels { get; set; }
+        public List<ReportNotificationChannel> NotificationChannels { get; set; }
         public bool IsActive { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
@@ -281,7 +282,7 @@ namespace DigitalTwin.Core.DTOs
     /// <summary>
     /// Notification channel for report delivery
     /// </summary>
-    public class NotificationChannel
+    public class ReportNotificationChannel
     {
         public string Type { get; set; }
         public string Address { get; set; }
