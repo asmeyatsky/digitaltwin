@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Prometheus;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using DigitalTwin.Core.Data;
@@ -102,6 +103,21 @@ namespace DigitalTwin.API
 
             builder.Services.AddAuthorization();
 
+            // Distributed cache — Redis in production, in-memory for development
+            var redisConnection = Environment.GetEnvironmentVariable("Redis__ConnectionString");
+            if (!string.IsNullOrEmpty(redisConnection))
+            {
+                builder.Services.AddStackExchangeRedisCache(options =>
+                {
+                    options.Configuration = redisConnection;
+                    options.InstanceName = "digitaltwin:";
+                });
+            }
+            else
+            {
+                builder.Services.AddDistributedMemoryCache();
+            }
+
             // HttpClient with named clients and timeouts
             builder.Services.AddHttpClient("DeepFace", client =>
             {
@@ -177,7 +193,10 @@ namespace DigitalTwin.API
             app.UseAuthentication();
             app.UseAuthorization();
 
+            app.UseHttpMetrics();
+
             app.MapControllers();
+            app.MapMetrics();
 
             app.MapGet("/health", () => new
             {

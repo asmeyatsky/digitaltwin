@@ -1,7 +1,9 @@
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using DigitalTwin.Core.DTOs;
 using DigitalTwin.Core.Entities;
@@ -19,18 +21,26 @@ namespace DigitalTwin.Core.Services
         private readonly IEmotionalStateService _emotionalStateService;
         private readonly IAITwinService _aiTwinService;
         private readonly ILogger<ConversationService> _logger;
-        private readonly Dictionary<Guid, ConversationSession> _activeSessions;
-        
+        private readonly IDistributedCache _cache;
+
+        private static readonly DistributedCacheEntryOptions SessionCacheOptions = new()
+        {
+            SlidingExpiration = TimeSpan.FromHours(1)
+        };
+
         public ConversationService(
             IEmotionalStateService emotionalStateService,
             IAITwinService aiTwinService,
-            ILogger<ConversationService> logger)
+            ILogger<ConversationService> logger,
+            IDistributedCache cache)
         {
             _emotionalStateService = emotionalStateService;
             _aiTwinService = aiTwinService;
             _logger = logger;
-            _activeSessions = new Dictionary<Guid, ConversationSession>();
+            _cache = cache;
         }
+
+        private string SessionCacheKey(Guid userId) => $"conv:session:{userId}";
         
         public async Task<ConversationResponse> StartConversationAsync(Guid userId, string initialMessage = null)
         {
@@ -49,7 +59,7 @@ namespace DigitalTwin.Core.Services
                     ConversationContext = new Dictionary<string, object>()
                 };
                 
-                _activeSessions[userId] = session;
+                await _cache.SetStringAsync(SessionCacheKey(userId), JsonSerializer.Serialize(session), SessionCacheOptions);
                 
                 // Get user's emotional context from memories
                 var userMemories = await _emotionalStateService.GetUserMemoriesAsync(userId, 20);
@@ -109,7 +119,8 @@ namespace DigitalTwin.Core.Services
             {
                 _logger.LogInformation("Processing message for user {UserId}: {Message}", userId, message);
                 
-                if (!_activeSessions.ContainsKey(userId))
+                var sessionJson = await _cache.GetStringAsync(SessionCacheKey(userId));
+                if (sessionJson == null)
                 {
                     return new ConversationResponse
                     {
@@ -118,8 +129,8 @@ namespace DigitalTwin.Core.Services
                         Response = "Let's start a new conversation first!"
                     };
                 }
-                
-                var session = _activeSessions[userId];
+
+                var session = JsonSerializer.Deserialize<ConversationSession>(sessionJson);
                 
                 // Get relevant memories for context
                 var relevantMemories = await _emotionalStateService.GetRelevantMemoriesAsync(userId, message, 10);
@@ -161,6 +172,9 @@ namespace DigitalTwin.Core.Services
                 session.ConversationContext["last_emotion"] = detectedEmotion;
                 session.ConversationContext["message_count"] = session.MessageCount;
 
+                // Write updated session back to cache
+                await _cache.SetStringAsync(SessionCacheKey(userId), JsonSerializer.Serialize(session), SessionCacheOptions);
+
                 // Create response
                 var response = new ConversationResponse
                 {
@@ -195,12 +209,13 @@ namespace DigitalTwin.Core.Services
             {
                 _logger.LogInformation("Ending conversation for user {UserId}", userId);
                 
-                if (_activeSessions.ContainsKey(userId))
+                var cachedJson = await _cache.GetStringAsync(SessionCacheKey(userId));
+                if (cachedJson != null)
                 {
-                    var session = _activeSessions[userId];
+                    var session = JsonSerializer.Deserialize<ConversationSession>(cachedJson);
                     session.IsActive = false;
                     session.EndedAt = DateTime.UtcNow;
-                    
+
                     // Store conversation summary memory
                     var summaryMemory = new EmotionalMemory
                     {
@@ -213,18 +228,18 @@ namespace DigitalTwin.Core.Services
                         AssociatedEmotions = new List<EmotionType> { session.CurrentEmotionalState },
                         EmotionTags = new List<string> { "conversation_end", "summary" }
                     };
-                    
+
                     await _emotionalStateService.StoreEmotionalMemoryAsync(summaryMemory);
-                    
-                    _activeSessions.Remove(userId);
-                    
+
+                    await _cache.RemoveAsync(SessionCacheKey(userId));
+
                     // Clean up AI twin session
                     await _aiTwinService.EndUserSessionAsync(userId.ToString());
-                    
+
                     _logger.LogInformation("Conversation ended successfully for user {UserId}", userId);
                     return true;
                 }
-                
+
                 return false;
             }
             catch (Exception ex)
@@ -238,13 +253,12 @@ namespace DigitalTwin.Core.Services
         {
             try
             {
-                if (_activeSessions.ContainsKey(userId))
+                var json = await _cache.GetStringAsync(SessionCacheKey(userId));
+                if (json != null)
                 {
-                    return _activeSessions[userId];
+                    return JsonSerializer.Deserialize<ConversationSession>(json);
                 }
-                
-                // Try to restore from database if exists
-                // Implementation would depend on your database schema
+
                 return null;
             }
             catch (Exception ex)
@@ -383,14 +397,5 @@ namespace DigitalTwin.Core.Services
             
             return tags;
         }
-    }
-    
-    public interface IConversationService
-    {
-        Task<ConversationResponse> StartConversationAsync(Guid userId, string initialMessage = null);
-        Task<ConversationResponse> ProcessMessageAsync(Guid userId, string message);
-        Task<bool> EndConversationAsync(Guid userId);
-        Task<ConversationSession> GetActiveSessionAsync(Guid userId);
-        Task<List<EmotionalMemory>> GetConversationMemoriesAsync(Guid userId, int limit = 50);
     }
 }

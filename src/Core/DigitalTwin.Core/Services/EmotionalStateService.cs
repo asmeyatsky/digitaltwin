@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using DigitalTwin.Core.Data;
 using DigitalTwin.Core.Entities;
@@ -20,16 +22,24 @@ namespace DigitalTwin.Core.Services
     {
         private readonly DigitalTwinDbContext _context;
         private readonly ILogger<EmotionalStateService> _logger;
-        private readonly Dictionary<string, List<EmotionalMemory>> _userMemories;
+        private readonly IDistributedCache _cache;
+
+        private static readonly DistributedCacheEntryOptions MemoryCacheOptions = new()
+        {
+            SlidingExpiration = TimeSpan.FromMinutes(30)
+        };
 
         public EmotionalStateService(
             DigitalTwinDbContext context,
-            ILogger<EmotionalStateService> logger)
+            ILogger<EmotionalStateService> logger,
+            IDistributedCache cache)
         {
             _context = context;
             _logger = logger;
-            _userMemories = new Dictionary<string, List<EmotionalMemory>>();
+            _cache = cache;
         }
+
+        private static string MemoryCacheKey(string userId) => $"emo:memories:{userId}";
 
         public async Task<bool> StoreEmotionalMemoryAsync(EmotionalMemory memory)
         {
@@ -40,26 +50,27 @@ namespace DigitalTwin.Core.Services
 
                 var userKey = memory.UserId ?? "";
 
-                // Add to user's memory list
-                if (!_userMemories.ContainsKey(userKey))
-                {
-                    _userMemories[userKey] = new List<EmotionalMemory>();
-                }
-
-                _userMemories[userKey].Add(memory);
-
                 // Store in database
                 _context.EmotionalMemories.Add(memory);
                 await _context.SaveChangesAsync();
 
-                // Limit memory list to 50 most recent
-                if (_userMemories[userKey].Count > 50)
+                // Update cache: load existing, append, trim to 50
+                var cached = await _cache.GetStringAsync(MemoryCacheKey(userKey));
+                var memories = cached != null
+                    ? JsonSerializer.Deserialize<List<EmotionalMemory>>(cached)
+                    : new List<EmotionalMemory>();
+
+                memories.Add(memory);
+
+                if (memories.Count > 50)
                 {
-                    _userMemories[userKey] = _userMemories[userKey]
+                    memories = memories
                         .OrderByDescending(m => m.CreatedAt)
                         .Take(50)
                         .ToList();
                 }
+
+                await _cache.SetStringAsync(MemoryCacheKey(userKey), JsonSerializer.Serialize(memories), MemoryCacheOptions);
 
                 _logger.LogInformation("Successfully stored emotional memory: {MemoryId}", memory.Id);
                 return true;
@@ -78,9 +89,11 @@ namespace DigitalTwin.Core.Services
                 var userKey = userId.ToString();
 
                 // Get memories from cache first
-                if (_userMemories.ContainsKey(userKey))
+                var cached = await _cache.GetStringAsync(MemoryCacheKey(userKey));
+                if (cached != null)
                 {
-                    return _userMemories[userKey].Take(limit).ToList();
+                    var cachedMemories = JsonSerializer.Deserialize<List<EmotionalMemory>>(cached);
+                    return cachedMemories.Take(limit).ToList();
                 }
 
                 // Fallback to database
@@ -91,7 +104,7 @@ namespace DigitalTwin.Core.Services
                     .ToListAsync();
 
                 // Cache the results
-                _userMemories[userKey] = memories;
+                await _cache.SetStringAsync(MemoryCacheKey(userKey), JsonSerializer.Serialize(memories), MemoryCacheOptions);
 
                 _logger.LogInformation("Retrieved {Count} memories for user {UserId}", memories.Count, userId);
                 return memories;
@@ -332,14 +345,5 @@ namespace DigitalTwin.Core.Services
 
             return (consistencyScore * 0.6 + dataQuality * 0.4) * recencyFactor;
         }
-    }
-
-    public interface IEmotionalStateService
-    {
-        Task<bool> StoreEmotionalMemoryAsync(EmotionalMemory memory);
-        Task<List<EmotionalMemory>> GetUserMemoriesAsync(Guid userId, int limit = 50);
-        Task<List<EmotionalMemory>> GetRelevantMemoriesAsync(Guid userId, string context, int limit = 10);
-        Task<EmotionalTrend> AnalyzeEmotionalTrendsAsync(Guid userId, TimeSpan period);
-        Task<bool> UpdateMemoryImportanceAsync(Guid memoryId, Guid userId, int importance);
     }
 }
