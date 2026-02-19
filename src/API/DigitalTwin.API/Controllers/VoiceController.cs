@@ -95,6 +95,39 @@ namespace DigitalTwin.API.Controllers
             }
         }
 
+        [HttpPost("analyze-emotion")]
+        public async Task<IActionResult> AnalyzeVoiceEmotion()
+        {
+            try
+            {
+                var file = Request.Form.Files.FirstOrDefault();
+                if (file == null)
+                    return BadRequest(new { success = false, message = "No audio file provided" });
+
+                var client = _httpClientFactory.CreateClient("Voice");
+                client.DefaultRequestHeaders.Add("X-Service-Key", _serviceKey);
+
+                using var content = new MultipartFormDataContent();
+                var stream = file.OpenReadStream();
+                var streamContent = new StreamContent(stream);
+                streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType ?? "audio/wav");
+                content.Add(streamContent, "file", file.FileName ?? "audio.wav");
+
+                var response = await client.PostAsync("/voice/analyze-emotion", content);
+                var responseContent = await response.Content.ReadAsStringAsync();
+
+                if (!response.IsSuccessStatusCode)
+                    return StatusCode((int)response.StatusCode, new { success = false, message = "Voice emotion analysis failed" });
+
+                return Content(responseContent, "application/json");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error proxying voice emotion analysis request");
+                return StatusCode(500, new { success = false, message = "Failed to analyze voice emotion" });
+            }
+        }
+
         [HttpPost("clone")]
         public async Task<IActionResult> CloneVoice()
         {

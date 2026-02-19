@@ -16,7 +16,7 @@ import EmotionBadge from "@/components/EmotionBadge";
 import VoiceRecorder from "@/components/VoiceRecorder";
 import AvatarView from "@/components/AvatarView";
 import Avatar3DView from "@/components/Avatar3DView";
-import { useConversation, useEmotion, useAvatar, getEmotionBgTint } from "@/lib/hooks";
+import { useConversation, useEmotion, useAvatar, useCheckIn, getEmotionBgTint } from "@/lib/hooks";
 import type { Message } from "@/lib/api";
 
 export default function ChatScreen() {
@@ -33,6 +33,7 @@ export default function ChatScreen() {
 
   const { currentEmotion } = useEmotion();
   const { avatarUrl: glbAvatarUrl } = useAvatar();
+  const { pendingCheckIns, respond: respondToCheckIn } = useCheckIn();
 
   const bgTint = getEmotionBgTint(currentEmotion?.primary);
 
@@ -137,6 +138,45 @@ export default function ChatScreen() {
 
         <EmotionBadge emotion={currentEmotion} size="sm" />
       </View>
+
+      {/* Check-in Banner */}
+      {pendingCheckIns.length > 0 && (
+        <View className="mx-4 mt-2 bg-primary-50 border border-primary-200 rounded-2xl px-4 py-3">
+          <Text className="text-sm font-semibold text-primary-700 mb-1">
+            Check-in
+          </Text>
+          <Text className="text-sm text-warmgray-700 leading-5">
+            {pendingCheckIns[0].emotionContext ?? "How are you feeling today?"}
+          </Text>
+          <View className="flex-row gap-2 mt-2">
+            <Pressable
+              onPress={() => {
+                respondToCheckIn({
+                  id: pendingCheckIns[0].id,
+                  response: "acknowledged",
+                });
+              }}
+              className="bg-primary-500 rounded-full px-4 py-1.5"
+              style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+            >
+              <Text className="text-white text-xs font-medium">
+                I'm doing okay
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setInputText("I'd like to talk about how I'm feeling");
+              }}
+              className="bg-white border border-primary-300 rounded-full px-4 py-1.5"
+              style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+            >
+              <Text className="text-primary-600 text-xs font-medium">
+                Let's talk
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
 
       {/* Messages */}
       <KeyboardAvoidingView

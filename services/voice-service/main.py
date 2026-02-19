@@ -503,6 +503,138 @@ async def get_user_voice(request: Request, user_id: str):
     return {"user_id": user_id, "voice_id": voice_id}
 
 
+class VoiceEmotionResult(BaseModel):
+    """Voice emotion analysis result"""
+    emotion: str
+    confidence: float
+    features: dict
+
+
+@app.post("/voice/analyze-emotion", response_model=VoiceEmotionResult)
+@limiter.limit("30/minute")
+async def analyze_voice_emotion(request: Request, file: UploadFile = File(...)):
+    """
+    Analyze emotion from audio file using acoustic features.
+    Accepts WAV or MP3 files. Extracts pitch, energy, speaking rate, and MFCCs
+    to classify emotion via rule-based mapping.
+    """
+    try:
+        import numpy as np
+
+        content = await validate_audio_upload(file)
+
+        # Write to temp file for librosa processing
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+
+        try:
+            import librosa
+
+            # Load audio
+            y, sr = librosa.load(tmp_path, sr=22050)
+
+            if len(y) < sr * 0.5:  # Less than 0.5 seconds
+                raise HTTPException(status_code=400, detail="Audio too short for analysis (minimum 0.5 seconds)")
+
+            # Extract features
+            # Pitch (fundamental frequency)
+            pitches, magnitudes = librosa.piptrack(y=y, sr=sr)
+            pitch_values = []
+            for t in range(pitches.shape[1]):
+                index = magnitudes[:, t].argmax()
+                pitch = pitches[index, t]
+                if pitch > 0:
+                    pitch_values.append(pitch)
+
+            pitch_mean = float(np.mean(pitch_values)) if pitch_values else 0.0
+            pitch_std = float(np.std(pitch_values)) if pitch_values else 0.0
+
+            # Energy (RMS)
+            rms = librosa.feature.rms(y=y)[0]
+            energy_mean = float(np.mean(rms))
+
+            # Speaking rate (onset detection as proxy)
+            onset_env = librosa.onset.onset_strength(y=y, sr=sr)
+            onsets = librosa.onset.onset_detect(onset_envelope=onset_env, sr=sr)
+            duration = len(y) / sr
+            speaking_rate = len(onsets) / duration if duration > 0 else 0.0
+
+            # MFCCs
+            mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
+            mfcc_mean = float(np.mean(mfccs))
+
+            features = {
+                "pitch_mean": round(pitch_mean, 2),
+                "pitch_std": round(pitch_std, 2),
+                "energy_mean": round(energy_mean, 6),
+                "speaking_rate": round(speaking_rate, 2),
+                "mfcc_mean": round(mfcc_mean, 4),
+            }
+
+            # Rule-based emotion classification
+            emotion, confidence = _classify_voice_emotion(
+                pitch_mean, pitch_std, energy_mean, speaking_rate
+            )
+
+            return VoiceEmotionResult(
+                emotion=emotion,
+                confidence=round(confidence, 2),
+                features=features,
+            )
+
+        finally:
+            os.unlink(tmp_path)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Voice emotion analysis error: {e}")
+        raise HTTPException(status_code=500, detail="Voice emotion analysis failed")
+
+
+def _classify_voice_emotion(
+    pitch_mean: float, pitch_std: float, energy_mean: float, speaking_rate: float
+) -> tuple[str, float]:
+    """Rule-based emotion classification from acoustic features."""
+    # Normalize features to rough 0-1 scale
+    pitch_norm = min(pitch_mean / 500.0, 1.0)
+    energy_norm = min(energy_mean / 0.1, 1.0)
+    pitch_var_norm = min(pitch_std / 200.0, 1.0)
+
+    scores = {
+        "happy": 0.0,
+        "sad": 0.0,
+        "angry": 0.0,
+        "anxious": 0.0,
+        "calm": 0.0,
+        "neutral": 0.3,
+    }
+
+    # High pitch + high energy → Excited/Happy
+    if pitch_norm > 0.5 and energy_norm > 0.5:
+        scores["happy"] = 0.5 + 0.3 * pitch_norm + 0.2 * energy_norm
+
+    # Low pitch + low energy → Sad/Calm
+    if pitch_norm < 0.4 and energy_norm < 0.4:
+        scores["sad"] = 0.4 + 0.3 * (1 - pitch_norm) + 0.2 * (1 - energy_norm)
+        scores["calm"] = 0.3 + 0.2 * (1 - energy_norm)
+
+    # High pitch variance → Anxious/Surprised
+    if pitch_var_norm > 0.5:
+        scores["anxious"] = 0.4 + 0.4 * pitch_var_norm
+
+    # High energy + low pitch → Angry
+    if energy_norm > 0.6 and pitch_norm < 0.4:
+        scores["angry"] = 0.5 + 0.3 * energy_norm + 0.2 * (1 - pitch_norm)
+
+    best_emotion = max(scores, key=scores.get)
+    confidence = min(scores[best_emotion], 0.95)
+
+    return best_emotion, confidence
+
+
 @app.delete("/voice/user/{user_id}")
 @limiter.limit("30/minute")
 async def delete_user_voice(request: Request, user_id: str):

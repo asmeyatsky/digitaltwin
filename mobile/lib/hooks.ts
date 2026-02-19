@@ -429,6 +429,43 @@ export function useSubscription() {
 }
 
 // ---------------------------------------------------------------------------
+// useCheckIn
+// ---------------------------------------------------------------------------
+
+export function useCheckIn() {
+  const queryClient = useQueryClient();
+
+  const pendingQuery = useQuery({
+    queryKey: ["checkIns"],
+    queryFn: async () => {
+      const res = await api.getPendingCheckIns();
+      if (!res.success) throw new Error(res.message ?? "Failed to load check-ins");
+      return res.data;
+    },
+    enabled: useAuthStore.getState().isAuthenticated,
+    refetchInterval: 5 * 60 * 1000, // poll every 5 minutes
+  });
+
+  const respondMutation = useMutation({
+    mutationFn: async ({ id, response }: { id: string; response: string }) => {
+      const res = await api.respondToCheckIn(id, response);
+      if (!res.success) throw new Error(res.message ?? "Failed to respond");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["checkIns"] });
+    },
+  });
+
+  return {
+    pendingCheckIns: pendingQuery.data ?? [],
+    isLoading: pendingQuery.isLoading,
+    respond: respondMutation.mutateAsync,
+    isResponding: respondMutation.isPending,
+    refetch: pendingQuery.refetch,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // useTTS
 // ---------------------------------------------------------------------------
 

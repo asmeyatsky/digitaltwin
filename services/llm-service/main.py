@@ -394,6 +394,44 @@ async def analyze_message(request: Request, body: dict):
         return {"error": "Internal server error"}
 
 
+class EmbeddingRequest(BaseModel):
+    """Request model for embedding generation"""
+    text: str
+
+
+class EmbeddingResponse(BaseModel):
+    """Response model for embedding generation"""
+    embedding: List[float]
+
+
+@app.post("/embedding", response_model=EmbeddingResponse)
+@limiter.limit("120/minute")
+async def generate_embedding(request: Request, body: EmbeddingRequest):
+    """
+    Generate text embedding using OpenAI text-embedding-3-small model.
+    Returns a 1536-dimensional vector.
+    """
+    try:
+        if not os.getenv("OPENAI_API_KEY"):
+            raise HTTPException(status_code=503, detail="OpenAI API key not configured")
+
+        client = openai.AsyncOpenAI()
+        response = await client.embeddings.create(
+            model="text-embedding-3-small",
+            input=body.text,
+        )
+
+        embedding = response.data[0].embedding
+        return EmbeddingResponse(embedding=embedding)
+
+    except openai.OpenAIError as e:
+        logger.error(f"OpenAI embedding error: {e}")
+        raise HTTPException(status_code=503, detail="Embedding generation failed")
+    except Exception as e:
+        logger.error(f"Error generating embedding: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint"""

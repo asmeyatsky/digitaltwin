@@ -6,6 +6,8 @@ using DigitalTwin.Core.Data;
 using DigitalTwin.Core.Security;
 using DigitalTwin.Core.Interfaces;
 using DigitalTwin.Core.Services;
+using DigitalTwin.Core.Plugins;
+using DigitalTwin.API.Middleware;
 using System.Text;
 
 namespace DigitalTwin.API
@@ -167,6 +169,23 @@ namespace DigitalTwin.API
             builder.Services.AddScoped<IWebhookService, WebhookService>();
             builder.Services.AddScoped<IConversationService, ConversationService>();
             builder.Services.AddScoped<IEmotionalStateService, EmotionalStateService>();
+            builder.Services.AddScoped<IEmbeddingService, EmbeddingService>();
+            builder.Services.AddScoped<IEmotionFusionService, EmotionFusionService>();
+            builder.Services.AddScoped<IUsageLimitService, UsageLimitService>();
+            builder.Services.AddScoped<IProactiveCheckInService, ProactiveCheckInService>();
+
+            // Encryption — optional, enabled when ENCRYPTION_KEY is set
+            var encryptionKey = Environment.GetEnvironmentVariable("ENCRYPTION_KEY");
+            if (!string.IsNullOrEmpty(encryptionKey))
+            {
+                builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
+            }
+
+            // Plugin system
+            builder.Services.AddScoped<ICompanionPlugin, SafetyPlugin>();
+            builder.Services.AddScoped<ICompanionPlugin, MoodTrackingPlugin>();
+            builder.Services.AddScoped<ICompanionPlugin, PersonalityPlugin>();
+            builder.Services.AddScoped<IPluginManager, PluginManager>();
 
             // CORS — restrict in production
             var allowedOrigins = Environment.GetEnvironmentVariable("CORS__AllowedOrigins")?.Split(',')
@@ -199,6 +218,7 @@ namespace DigitalTwin.API
             app.UseCors("Default");
             app.UseAuthentication();
             app.UseAuthorization();
+            app.UseUsageLimitMiddleware();
 
             app.UseHttpMetrics();
 

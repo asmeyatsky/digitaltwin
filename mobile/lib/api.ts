@@ -498,3 +498,49 @@ export async function createCheckoutSession(
 export async function cancelSubscription(): Promise<ApiResponse<void>> {
   return request<void>("/api/subscription/cancel", { method: "POST" });
 }
+
+// ---------------------------------------------------------------------------
+// Check-In API
+// ---------------------------------------------------------------------------
+
+export interface CheckInRecord {
+  id: string;
+  userId: string;
+  scheduledAt: string;
+  sentAt?: string;
+  type: "daily" | "weekly" | "mood_triggered";
+  emotionContext?: string;
+  response?: string;
+  createdAt: string;
+}
+
+export interface CheckInSuggestion {
+  type: string;
+  message: string;
+  emotionContext?: string;
+  suggestedAt: string;
+}
+
+export async function getPendingCheckIns(): Promise<
+  ApiResponse<CheckInRecord[]>
+> {
+  return request<CheckInRecord[]>("/api/checkin/pending");
+}
+
+export async function respondToCheckIn(
+  id: string,
+  response: string
+): Promise<ApiResponse<void>> {
+  return request<void>(`/api/checkin/${id}/respond`, {
+    method: "POST",
+    body: JSON.stringify({ response }),
+  });
+}
+
+export async function evaluateCheckIn(): Promise<
+  ApiResponse<CheckInSuggestion | null>
+> {
+  return request<CheckInSuggestion | null>("/api/checkin/evaluate", {
+    method: "POST",
+  });
+}

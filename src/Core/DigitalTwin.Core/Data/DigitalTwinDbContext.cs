@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using DigitalTwin.Core.Entities;
+using Pgvector;
+using Pgvector.EntityFrameworkCore;
 using System.Text.Json;
 
 namespace DigitalTwin.Core.Data
@@ -46,13 +48,15 @@ namespace DigitalTwin.Core.Data
         // Subscription Entities
         public DbSet<Subscription> Subscriptions { get; set; }
 
-        // Security Entities (simplified for now)
-        // public DbSet<UserSession> UserSessions { get; set; }
-        // public DbSet<SecurityEvent> SecurityEvents { get; set; }
+        // Check-In Entities
+        public DbSet<CheckInRecord> CheckInRecords { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+
+            // Enable pgvector extension
+            modelBuilder.HasPostgresExtension("vector");
 
             // Configure AI Twin Profile
             modelBuilder.Entity<AITwinProfile>(entity =>
@@ -203,6 +207,29 @@ namespace DigitalTwin.Core.Data
                 entity.HasIndex(e => e.UserId).IsUnique();
                 entity.HasIndex(e => e.StripeCustomerId);
                 entity.HasIndex(e => e.StripeSubscriptionId);
+            });
+
+            // Configure EmotionalMemory embedding for pgvector
+            modelBuilder.Entity<EmotionalMemory>(entity =>
+            {
+                entity.Property(e => e.Embedding)
+                    .HasColumnType("vector(1536)");
+
+                entity.HasIndex(e => e.Embedding)
+                    .HasMethod("ivfflat")
+                    .HasOperators("vector_cosine_ops");
+            });
+
+            // Configure CheckInRecord
+            modelBuilder.Entity<CheckInRecord>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.UserId).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.Type).IsRequired().HasMaxLength(30);
+                entity.Property(e => e.EmotionContext).HasMaxLength(500);
+                entity.Property(e => e.Response).HasMaxLength(2000);
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => new { e.UserId, e.ScheduledAt });
             });
 
             // Add indexes for performance

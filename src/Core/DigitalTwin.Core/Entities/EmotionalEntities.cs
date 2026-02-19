@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using DigitalTwin.Core.Interfaces;
+using Pgvector;
 
 namespace DigitalTwin.Core.Entities
 {
@@ -23,6 +24,9 @@ namespace DigitalTwin.Core.Entities
         public List<EmotionType> AssociatedEmotions { get; set; } = new();
         public List<string> EmotionTags { get; set; } = new();
         public Dictionary<string, object> Metadata { get; set; } = new();
+
+        // pgvector embedding for semantic search
+        public Vector? Embedding { get; set; }
 
         /// <summary>
         /// Alias for EmotionType for backward compatibility
@@ -82,9 +86,15 @@ namespace DigitalTwin.Core.Entities
     {
         public Guid Id { get; set; } = Guid.NewGuid();
         public string Role { get; set; } // "user" or "assistant"
-        public string Content { get; set; }
+        public string? Content { get; set; }
         public DateTime Timestamp { get; set; }
         public EmotionType DetectedEmotion { get; set; }
+
+        // Encryption at rest fields
+        public byte[]? EncryptedContent { get; set; }
+        public byte[]? IV { get; set; }
+        public byte[]? AuthTag { get; set; }
+        public bool IsEncrypted { get; set; }
     }
 
     /// <summary>

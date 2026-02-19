@@ -11,6 +11,8 @@ using DigitalTwin.Core.Entities;
 using DigitalTwin.Core.DTOs;
 using DigitalTwin.Core.Enums;
 using DigitalTwin.Core.Interfaces;
+using Pgvector;
+using Pgvector.EntityFrameworkCore;
 
 namespace DigitalTwin.Core.Services
 {
@@ -23,6 +25,7 @@ namespace DigitalTwin.Core.Services
         private readonly DigitalTwinDbContext _context;
         private readonly ILogger<EmotionalStateService> _logger;
         private readonly IDistributedCache _cache;
+        private readonly IEmbeddingService? _embeddingService;
 
         private static readonly DistributedCacheEntryOptions MemoryCacheOptions = new()
         {
@@ -32,11 +35,13 @@ namespace DigitalTwin.Core.Services
         public EmotionalStateService(
             DigitalTwinDbContext context,
             ILogger<EmotionalStateService> logger,
-            IDistributedCache cache)
+            IDistributedCache cache,
+            IEmbeddingService? embeddingService = null)
         {
             _context = context;
             _logger = logger;
             _cache = cache;
+            _embeddingService = embeddingService;
         }
 
         private static string MemoryCacheKey(string userId) => $"emo:memories:{userId}";
@@ -49,6 +54,20 @@ namespace DigitalTwin.Core.Services
                     memory.UserId, memory.EmotionType, memory.Intensity);
 
                 var userKey = memory.UserId ?? "";
+
+                // Generate embedding for semantic search
+                if (_embeddingService != null && !string.IsNullOrEmpty(memory.Description))
+                {
+                    try
+                    {
+                        var embeddingValues = await _embeddingService.GenerateEmbeddingAsync(memory.Description);
+                        memory.Embedding = new Pgvector.Vector(embeddingValues);
+                    }
+                    catch (Exception embEx)
+                    {
+                        _logger.LogWarning(embEx, "Failed to generate embedding, storing without vector");
+                    }
+                }
 
                 // Store in database
                 _context.EmotionalMemories.Add(memory);
@@ -120,9 +139,38 @@ namespace DigitalTwin.Core.Services
         {
             try
             {
+                var userKey = userId.ToString();
+
+                // Try semantic vector search first
+                if (_embeddingService != null)
+                {
+                    try
+                    {
+                        var queryEmbedding = await _embeddingService.GenerateEmbeddingAsync(context);
+                        var queryVector = new Pgvector.Vector(queryEmbedding);
+
+                        var semanticResults = await _context.EmotionalMemories
+                            .Where(m => m.UserId == userKey && m.Embedding != null)
+                            .OrderBy(m => m.Embedding!.CosineDistance(queryVector))
+                            .Take(limit)
+                            .ToListAsync();
+
+                        if (semanticResults.Any())
+                        {
+                            _logger.LogInformation("Found {Count} semantic matches for user {UserId}",
+                                semanticResults.Count, userId);
+                            return semanticResults;
+                        }
+                    }
+                    catch (Exception embEx)
+                    {
+                        _logger.LogWarning(embEx, "Semantic search failed, falling back to string matching");
+                    }
+                }
+
+                // Fallback to string matching
                 var allMemories = await GetUserMemoriesAsync(userId);
 
-                // Find memories relevant to current context
                 var relevantMemories = allMemories
                     .Where(m => (m.Description != null && m.Description.Contains(context, StringComparison.OrdinalIgnoreCase)) ||
                                (m.EmotionTags != null && m.EmotionTags.Any(tag => tag.Contains(context, StringComparison.OrdinalIgnoreCase))) ||
