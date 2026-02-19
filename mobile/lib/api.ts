@@ -746,3 +746,324 @@ export async function evaluateCheckIn(): Promise<
     method: "POST",
   });
 }
+
+// ---------------------------------------------------------------------------
+// Notification API
+// ---------------------------------------------------------------------------
+
+export async function registerDevice(
+  token: string,
+  platform: string
+): Promise<ApiResponse<void>> {
+  return request<void>("/api/notifications/register-device", {
+    method: "POST",
+    body: JSON.stringify({ token, platform }),
+  });
+}
+
+export async function unregisterDevice(
+  token: string
+): Promise<ApiResponse<void>> {
+  return request<void>("/api/notifications/unregister-device", {
+    method: "DELETE",
+    body: JSON.stringify({ token }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Personal History / Life Events API
+// ---------------------------------------------------------------------------
+
+export type LifeEventCategory =
+  | "Career"
+  | "Relationship"
+  | "Health"
+  | "Education"
+  | "Milestone"
+  | "Loss"
+  | "Achievement"
+  | "Travel";
+
+export type EmotionType =
+  | "Neutral"
+  | "Happy"
+  | "Sad"
+  | "Angry"
+  | "Anxious"
+  | "Surprised"
+  | "Calm"
+  | "Excited";
+
+export interface LifeEvent {
+  id: string;
+  userId: string;
+  title: string;
+  description: string;
+  eventDate: string;
+  category: LifeEventCategory;
+  emotionalImpact: EmotionType;
+  isRecurring: boolean;
+  createdAt: string;
+}
+
+export interface PersonalContext {
+  id: string;
+  userId: string;
+  culturalBackground: string;
+  communicationPreferences: string; // JSON
+  importantPeople: string; // JSON list
+  values: string; // JSON list
+  updatedAt: string;
+}
+
+export interface ConversationLifeContext {
+  recentEvents: LifeEvent[];
+  upcomingEvents: LifeEvent[];
+  personalContext: PersonalContext | null;
+}
+
+export async function addLifeEvent(event: {
+  title: string;
+  description: string;
+  eventDate: string;
+  category: LifeEventCategory;
+  emotionalImpact: EmotionType;
+  isRecurring: boolean;
+}): Promise<ApiResponse<LifeEvent>> {
+  return request<LifeEvent>("/api/personal-history/events", {
+    method: "POST",
+    body: JSON.stringify({
+      Title: event.title,
+      Description: event.description,
+      EventDate: event.eventDate,
+      Category: event.category,
+      EmotionalImpact: event.emotionalImpact,
+      IsRecurring: event.isRecurring,
+    }),
+  });
+}
+
+export async function updateLifeEvent(
+  id: string,
+  event: {
+    title: string;
+    description: string;
+    eventDate: string;
+    category: LifeEventCategory;
+    emotionalImpact: EmotionType;
+    isRecurring: boolean;
+  }
+): Promise<ApiResponse<LifeEvent>> {
+  return request<LifeEvent>(`/api/personal-history/events/${id}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      Title: event.title,
+      Description: event.description,
+      EventDate: event.eventDate,
+      Category: event.category,
+      EmotionalImpact: event.emotionalImpact,
+      IsRecurring: event.isRecurring,
+    }),
+  });
+}
+
+export async function deleteLifeEvent(
+  id: string
+): Promise<ApiResponse<{ deleted: boolean }>> {
+  return request<{ deleted: boolean }>(`/api/personal-history/events/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export async function getTimeline(
+  start?: string,
+  end?: string
+): Promise<ApiResponse<LifeEvent[]>> {
+  const params = new URLSearchParams();
+  if (start) params.set("start", start);
+  if (end) params.set("end", end);
+  const qs = params.toString();
+  return request<LifeEvent[]>(
+    `/api/personal-history/timeline${qs ? `?${qs}` : ""}`
+  );
+}
+
+export async function getUpcomingEvents(
+  daysAhead: number = 30
+): Promise<ApiResponse<LifeEvent[]>> {
+  return request<LifeEvent[]>(
+    `/api/personal-history/upcoming?daysAhead=${daysAhead}`
+  );
+}
+
+export async function getPersonalContext(): Promise<
+  ApiResponse<PersonalContext | null>
+> {
+  return request<PersonalContext | null>("/api/personal-history/context");
+}
+
+export async function updatePersonalContext(context: {
+  culturalBackground: string;
+  communicationPreferences: string;
+  importantPeople: string;
+  values: string;
+}): Promise<ApiResponse<PersonalContext>> {
+  return request<PersonalContext>("/api/personal-history/context", {
+    method: "PUT",
+    body: JSON.stringify({
+      CulturalBackground: context.culturalBackground,
+      CommunicationPreferences: context.communicationPreferences,
+      ImportantPeople: context.importantPeople,
+      Values: context.values,
+    }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Family / Household API
+// ---------------------------------------------------------------------------
+
+export type FamilyRole = "Owner" | "Adult" | "Child";
+
+export interface Family {
+  id: string;
+  name: string;
+  createdByUserId: string;
+  createdAt: string;
+}
+
+export interface FamilyMember {
+  id: string;
+  familyId: string;
+  userId: string;
+  role: FamilyRole;
+  joinedAt: string;
+}
+
+export interface FamilyInvite {
+  id: string;
+  familyId: string;
+  email: string;
+  role: FamilyRole;
+  inviteCode: string;
+  createdAt: string;
+  expiresAt: string;
+  isAccepted: boolean;
+}
+
+export interface FamilyInsights {
+  familyId: string;
+  memberCount: number;
+  emotionDistribution: Record<string, number>;
+  overallMood: string;
+  periodStart: string;
+  periodEnd: string;
+}
+
+export interface FamilyWithMembers {
+  family: Family;
+  members: FamilyMember[];
+}
+
+export async function createFamily(
+  name: string
+): Promise<ApiResponse<Family>> {
+  return request<Family>("/api/family", {
+    method: "POST",
+    body: JSON.stringify({ Name: name }),
+  });
+}
+
+export async function getFamily(): Promise<
+  ApiResponse<FamilyWithMembers | null>
+> {
+  return request<FamilyWithMembers | null>("/api/family");
+}
+
+export async function inviteFamilyMember(
+  familyId: string,
+  email: string,
+  role: FamilyRole
+): Promise<ApiResponse<FamilyInvite>> {
+  return request<FamilyInvite>(`/api/family/${familyId}/invite`, {
+    method: "POST",
+    body: JSON.stringify({ Email: email, Role: role }),
+  });
+}
+
+export async function joinFamily(
+  inviteCode: string
+): Promise<ApiResponse<FamilyMember>> {
+  return request<FamilyMember>("/api/family/join", {
+    method: "POST",
+    body: JSON.stringify({ InviteCode: inviteCode }),
+  });
+}
+
+export async function removeFamilyMember(
+  familyId: string,
+  memberUserId: string
+): Promise<ApiResponse<void>> {
+  return request<void>(`/api/family/${familyId}/members/${memberUserId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function getFamilyInsights(
+  familyId: string
+): Promise<ApiResponse<FamilyInsights>> {
+  return request<FamilyInsights>(`/api/family/${familyId}/insights`);
+}
+
+// ---------------------------------------------------------------------------
+// Achievement / Gamification API
+// ---------------------------------------------------------------------------
+
+export type AchievementCategory =
+  | "Emotional"
+  | "Social"
+  | "Growth"
+  | "Consistency"
+  | "Milestone";
+
+export interface AchievementDefinition {
+  id: string;
+  key: string;
+  title: string;
+  description: string;
+  iconName: string;
+  category: AchievementCategory;
+  requiredCount: number;
+}
+
+export interface UserAchievement {
+  id: string;
+  userId: string;
+  key: string;
+  title: string;
+  description: string;
+  iconName: string;
+  category: AchievementCategory;
+  progress: number;
+  requiredCount: number;
+  isUnlocked: boolean;
+  unlockedAt: string | null;
+}
+
+export async function getAchievements(): Promise<
+  ApiResponse<UserAchievement[]>
+> {
+  return request<UserAchievement[]>("/api/achievements");
+}
+
+export async function getMyAchievements(): Promise<
+  ApiResponse<UserAchievement[]>
+> {
+  return request<UserAchievement[]>("/api/achievements/mine");
+}
+
+export async function getUnlockedAchievements(): Promise<
+  ApiResponse<UserAchievement[]>
+> {
+  return request<UserAchievement[]>("/api/achievements/unlocked");
+}

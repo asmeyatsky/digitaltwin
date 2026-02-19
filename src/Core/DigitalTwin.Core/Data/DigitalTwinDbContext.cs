@@ -57,8 +57,24 @@ namespace DigitalTwin.Core.Data
         // Shared Experience Entities
         public DbSet<SharedRoom> SharedRooms { get; set; }
 
+        // Personal History Entities
+        public DbSet<LifeEvent> LifeEvents { get; set; }
+        public DbSet<PersonalContext> PersonalContexts { get; set; }
+
+        // Achievement Entities
+        public DbSet<AchievementDefinition> AchievementDefinitions { get; set; }
+        public DbSet<UserAchievement> UserAchievements { get; set; }
+
         // Check-In Entities
         public DbSet<CheckInRecord> CheckInRecords { get; set; }
+
+        // Family Entities
+        public DbSet<Family> Families { get; set; }
+        public DbSet<FamilyMember> FamilyMembers { get; set; }
+        public DbSet<FamilyInvite> FamilyInvites { get; set; }
+
+        // Notification Entities
+        public DbSet<DeviceToken> DeviceTokens { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -282,6 +298,18 @@ namespace DigitalTwin.Core.Data
                 entity.HasIndex(e => new { e.UserId, e.HabitName, e.Date });
             });
 
+            // Configure DeviceToken
+            modelBuilder.Entity<DeviceToken>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.UserId).IsRequired();
+                entity.Property(e => e.Token).IsRequired().HasMaxLength(500);
+                entity.Property(e => e.Platform).IsRequired().HasMaxLength(10);
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => new { e.UserId, e.Token }).IsUnique();
+            });
+
             // Configure SharedRoom
             modelBuilder.Entity<SharedRoom>(entity =>
             {
@@ -294,6 +322,91 @@ namespace DigitalTwin.Core.Data
                         v => JsonSerializer.Serialize(v, (JsonSerializerOptions)null),
                         v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions)null));
                 entity.HasIndex(e => e.IsActive);
+            });
+
+            // Configure LifeEvent
+            modelBuilder.Entity<LifeEvent>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.UserId).IsRequired();
+                entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.Description).HasMaxLength(4000);
+                entity.Property(e => e.Category).IsRequired()
+                    .HasConversion<string>().HasMaxLength(30);
+                entity.Property(e => e.EmotionalImpact)
+                    .HasConversion<string>().HasMaxLength(30);
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => e.UserId);
+                entity.HasIndex(e => e.EventDate);
+                entity.HasIndex(e => new { e.UserId, e.EventDate });
+            });
+
+            // Configure PersonalContext
+            modelBuilder.Entity<PersonalContext>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.UserId).IsRequired();
+                entity.Property(e => e.CulturalBackground).HasMaxLength(500);
+                entity.Property(e => e.CommunicationPreferences).HasMaxLength(2000);
+                entity.Property(e => e.ImportantPeople).HasMaxLength(4000);
+                entity.Property(e => e.Values).HasMaxLength(4000);
+                entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => e.UserId).IsUnique();
+            });
+
+            // Configure Family
+            modelBuilder.Entity<Family>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => e.CreatedByUserId);
+            });
+
+            // Configure FamilyMember
+            modelBuilder.Entity<FamilyMember>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Role).IsRequired()
+                    .HasConversion<string>().HasMaxLength(20);
+                entity.Property(e => e.JoinedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => e.UserId);
+                entity.HasIndex(e => e.FamilyId);
+                entity.HasIndex(e => new { e.FamilyId, e.UserId }).IsUnique();
+            });
+
+            // Configure FamilyInvite
+            modelBuilder.Entity<FamilyInvite>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Email).IsRequired().HasMaxLength(256);
+                entity.Property(e => e.InviteCode).IsRequired().HasMaxLength(8);
+                entity.Property(e => e.Role).IsRequired()
+                    .HasConversion<string>().HasMaxLength(20);
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => e.InviteCode).IsUnique();
+                entity.HasIndex(e => e.FamilyId);
+            });
+
+            // Configure AchievementDefinition
+            modelBuilder.Entity<AchievementDefinition>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Key).IsRequired().HasMaxLength(100);
+                entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.Description).HasMaxLength(1000);
+                entity.Property(e => e.IconName).HasMaxLength(50);
+                entity.Property(e => e.Category).IsRequired()
+                    .HasConversion<string>().HasMaxLength(30);
+                entity.HasIndex(e => e.Key).IsUnique();
+            });
+
+            // Configure UserAchievement
+            modelBuilder.Entity<UserAchievement>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => new { e.UserId, e.AchievementDefinitionId }).IsUnique();
             });
 
             // Add indexes for performance

@@ -21,19 +21,22 @@ namespace DigitalTwin.Core.Services
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly ILogger<ProactiveCheckInService> _logger;
         private readonly IEventBus? _eventBus;
+        private readonly IPushNotificationService? _notificationService;
 
         public ProactiveCheckInService(
             DigitalTwinDbContext context,
             IEmotionalStateService emotionalStateService,
             IHttpClientFactory httpClientFactory,
             ILogger<ProactiveCheckInService> logger,
-            IEventBus? eventBus = null)
+            IEventBus? eventBus = null,
+            IPushNotificationService? notificationService = null)
         {
             _context = context;
             _emotionalStateService = emotionalStateService;
             _httpClientFactory = httpClientFactory;
             _logger = logger;
             _eventBus = eventBus;
+            _notificationService = notificationService;
         }
 
         public async Task<CheckInSuggestion?> EvaluateCheckInAsync(string userId)
@@ -67,6 +70,10 @@ namespace DigitalTwin.Core.Services
 
                     MetricsRegistry.CheckInEvaluationsTotal.WithLabels("mood_triggered").Inc();
                     activity?.SetTag("triggerType", "mood_triggered");
+
+                    // Deliver check-in as push notification
+                    await SendCheckInPushAsync(userGuid, "mood_triggered", message);
+
                     return new CheckInSuggestion
                     {
                         Type = "mood_triggered",
@@ -91,6 +98,10 @@ namespace DigitalTwin.Core.Services
 
                     MetricsRegistry.CheckInEvaluationsTotal.WithLabels("daily").Inc();
                     activity?.SetTag("triggerType", "daily");
+
+                    // Deliver check-in as push notification
+                    await SendCheckInPushAsync(userGuid, "daily", message);
+
                     return new CheckInSuggestion
                     {
                         Type = "daily",
@@ -169,6 +180,32 @@ namespace DigitalTwin.Core.Services
             }
 
             return GetFallbackMessage(type);
+        }
+
+        private async Task SendCheckInPushAsync(Guid userId, string type, string message)
+        {
+            if (_notificationService == null) return;
+
+            try
+            {
+                var title = type switch
+                {
+                    "mood_triggered" => "Your companion is thinking of you",
+                    "daily" => "Daily check-in",
+                    "weekly" => "Weekly check-in",
+                    _ => "Check-in"
+                };
+
+                await _notificationService.SendPushAsync(userId, title, message, new Dictionary<string, string>
+                {
+                    { "type", "checkin" },
+                    { "checkInType", type }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to send check-in push notification for user {UserId}", userId);
+            }
         }
 
         private static string GetFallbackMessage(string type) => type switch

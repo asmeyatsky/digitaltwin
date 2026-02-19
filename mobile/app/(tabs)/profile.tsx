@@ -1,9 +1,10 @@
-import React from "react";
+import React, { useState, useCallback } from "react";
 import { View, Text, ScrollView, Pressable, Alert, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import AvatarView from "@/components/AvatarView";
 import { useAuth, useEmotion } from "@/lib/hooks";
+import { getUnlockedAchievements } from "@/lib/api";
 
 interface SettingsRowProps {
   label: string;
@@ -43,6 +44,19 @@ export default function ProfileScreen() {
   const { user, logout } = useAuth();
   const { currentEmotion } = useEmotion();
   const router = useRouter();
+  const [unlockedCount, setUnlockedCount] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      getUnlockedAchievements()
+        .then((res) => {
+          if (res.success && res.data) {
+            setUnlockedCount(res.data.length);
+          }
+        })
+        .catch(() => {});
+    }, [])
+  );
 
   const handleLogout = () => {
     if (Platform.OS === "web") {
@@ -112,6 +126,11 @@ export default function ProfileScreen() {
               label="Personality"
               description="Adjust communication style and tone"
               onPress={() => router.push("/settings/personality")}
+            />
+            <SettingsRow
+              label="Achievements"
+              description={`${unlockedCount} achievement${unlockedCount === 1 ? "" : "s"} unlocked`}
+              onPress={() => router.push("/achievements")}
             />
           </View>
         </View>

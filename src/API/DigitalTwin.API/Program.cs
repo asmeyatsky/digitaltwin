@@ -196,6 +196,11 @@ namespace DigitalTwin.API
                 client.BaseAddress = new Uri(baseUrl);
                 client.Timeout = TimeSpan.FromSeconds(60);
             });
+            builder.Services.AddHttpClient("ExpoPush", client =>
+            {
+                client.BaseAddress = new Uri("https://exp.host/--/api/v2/push/");
+                client.Timeout = TimeSpan.FromSeconds(30);
+            });
             builder.Services.AddHttpClient();
 
             // Stripe configuration
@@ -224,6 +229,7 @@ namespace DigitalTwin.API
             builder.Services.AddScoped<IEmotionFusionService, EmotionFusionService>();
             builder.Services.AddScoped<IUsageLimitService, UsageLimitService>();
             builder.Services.AddScoped<IProactiveCheckInService, ProactiveCheckInService>();
+            builder.Services.AddScoped<IPushNotificationService, PushNotificationService>();
 
             // Encryption — optional, enabled when Encryption__Key is set (AD-4 compliant)
             var encryptionKey = Environment.GetEnvironmentVariable("Encryption__Key");
@@ -242,6 +248,9 @@ namespace DigitalTwin.API
             builder.Services.AddScoped<IBiometricService, BiometricService>();
             builder.Services.AddScoped<ICoachingService, CoachingService>();
             builder.Services.AddScoped<ISharedExperienceService, SharedExperienceService>();
+            builder.Services.AddScoped<IPersonalHistoryService, PersonalHistoryService>();
+            builder.Services.AddScoped<IFamilyService, FamilyService>();
+            builder.Services.AddScoped<IAchievementService, AchievementService>();
 
             // Event bus — RabbitMQ in production, in-memory fallback for dev
             var rabbitMqConnection = Environment.GetEnvironmentVariable("RabbitMQ__ConnectionString");

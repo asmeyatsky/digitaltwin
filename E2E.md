@@ -10,7 +10,7 @@
 | Severity | Count | Fixed | Remaining |
 |----------|-------|-------|-----------|
 | CRITICAL | 20 | 20 | 0 |
-| WARNING | 19 | 14 | 5 |
+| WARNING | 19 | 17 | 2 |
 | INFO | 6 | — | — |
 
 ---
@@ -65,8 +65,8 @@
 |---|-------|--------|
 | W-1 | `System.Text.Json 8.0.4` has known high-severity vulnerability (NU1903) | ✅ FIXED — bumped to 8.0.5 |
 | W-2 | Orphaned `Building/Floor/Room/Equipment/Sensor` DbSets — never used by any service | ✅ FIXED — removed orphaned DbSets |
-| W-3 | `ConversationController` bypasses `IConversationService`, uses `DbContext` + raw HTTP directly | ⬜ DEFERRED — refactor requires broader changes |
-| W-4 | ~30+ uses of obsolete `EmotionType`/`EmotionalTone` enums — migration incomplete | ⬜ DEFERRED — large-scope enum migration |
+| W-3 | `ConversationController` bypasses `IConversationService`, uses `DbContext` + raw HTTP directly | ✅ FIXED — refactored controller to delegate all business logic to IConversationService |
+| W-4 | ~30+ uses of obsolete `EmotionType`/`EmotionalTone` enums — migration incomplete | ✅ FIXED — migrated all usages to canonical `Emotion` enum, removed 3 legacy enum definitions |
 | W-5 | Duplicate `PasswordHasher` classes in `Core.Security` (instance) and `Infrastructure.Security` (static) | ✅ FIXED — deleted unused Infrastructure.Security static duplicate; Core.Security instance version is the canonical one (DI-registered) |
 | W-6 | `ConversationMessage` and `ConversationMemory` entities have no DbSets | ✅ FIXED — added DbSets + model config |
 | W-7 | Biometric data collected on device (`biometric.ts`) is never synced to server API | ✅ FIXED — added syncBiometricData() |
@@ -81,7 +81,7 @@
 | W-16 | Dockerfile references non-existent `DigitalTwin.Presentation` and `DigitalTwin.Infrastructure.Tests` projects | ✅ FIXED — removed invalid refs |
 | W-17 | NuGet version resolution: `Pgvector 0.2.1` → `0.3.0`, `Stripe.net 45.15.0` → `46.0.0` | ⬜ DEFERRED — auto-resolved, no runtime issue |
 | W-18 | Test factory doesn't seed biometric/coaching data or register `IEncryptionService` stub | ✅ FIXED |
-| W-19 | No SignalR hub integration tests | ⬜ DEFERRED — requires WebSocket test infrastructure |
+| W-19 | No SignalR hub integration tests | ✅ FIXED — added 9 SignalR hub integration tests |
 
 ---
 
