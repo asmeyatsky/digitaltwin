@@ -21,6 +21,7 @@ services:
       - RabbitMQ__ConnectionString=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/digitaltwin
       - DeepFace__BaseUrl=http://deepface:8001
       - Services__LLM__BaseUrl=http://llm-service:8004
+      - OTEL__ExporterOtlpEndpoint=http://jaeger:4317
     depends_on:
       - postgres
       - redis
@@ -143,7 +144,8 @@ services:
   grafana:
     image: grafana/grafana:10.4.0
     container_name: digitaltwin-grafana
-    # Internal service - no host port mapping needed
+    ports:
+      - "3001:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
       - GF_USERS_ALLOW_SIGN_UP=false
@@ -203,6 +205,8 @@ services:
     image: jaegertracing/all-in-one:1.55
     container_name: digitaltwin-jaeger
     # Internal service - no host port mapping needed
+    ports:
+      - "16686:16686"
     environment:
       - COLLECTOR_OTLP_ENABLED=true
     networks:

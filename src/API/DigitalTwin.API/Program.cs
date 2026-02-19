@@ -11,6 +11,8 @@ using DigitalTwin.API.Middleware;
 using DigitalTwin.API.Hubs;
 using DigitalTwin.API.Services;
 using System.Security.Cryptography;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 
 namespace DigitalTwin.API
 {
@@ -265,6 +267,39 @@ namespace DigitalTwin.API
                           .WithHeaders("Content-Type", "Authorization", "X-Service-Key")
                           .AllowCredentials();
                 });
+            });
+
+            // OpenTelemetry distributed tracing — exports to Jaeger via OTLP
+            var otlpEndpoint = Environment.GetEnvironmentVariable("OTEL__ExporterOtlpEndpoint")
+                ?? "http://localhost:4317";
+
+            builder.Services.AddOpenTelemetry()
+                .ConfigureResource(resource => resource
+                    .AddService(
+                        serviceName: "digitaltwin-api",
+                        serviceVersion: "1.0.0"))
+                .WithTracing(tracing => tracing
+                    .AddAspNetCoreInstrumentation(opts =>
+                    {
+                        opts.RecordException = true;
+                        opts.Filter = ctx => !ctx.Request.Path.StartsWithSegments("/health")
+                                          && !ctx.Request.Path.StartsWithSegments("/metrics");
+                    })
+                    .AddHttpClientInstrumentation(opts => opts.RecordException = true)
+                    .AddEntityFrameworkCoreInstrumentation(opts => opts.SetDbStatementForText = true)
+                    .AddSource("DigitalTwin.API")
+                    .AddOtlpExporter(opts =>
+                    {
+                        opts.Endpoint = new Uri(otlpEndpoint);
+                    }));
+
+            // Structured JSON logging to console (for ELK ingestion via Docker log driver)
+            builder.Logging.ClearProviders();
+            builder.Logging.AddJsonConsole(options =>
+            {
+                options.IncludeScopes = true;
+                options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ";
+                options.JsonWriterOptions = new System.Text.Json.JsonWriterOptions { Indented = false };
             });
 
             var app = builder.Build();

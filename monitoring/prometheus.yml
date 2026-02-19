@@ -1,0 +1,35 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'digitaltwin-api'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['api-gateway:80']
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  - job_name: 'deepface-service'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['deepface:8001']
+    scrape_interval: 30s
+
+  - job_name: 'voice-service'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['voice-service:8003']
+    scrape_interval: 30s
+
+  - job_name: 'llm-service'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['llm-service:8004']
+    scrape_interval: 30s
+
+  - job_name: 'avatar-service'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['avatar-generation:8002']
+    scrape_interval: 30s

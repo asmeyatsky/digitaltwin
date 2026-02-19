@@ -214,9 +214,9 @@ Week 3 — Production Hardening
 | C-1 | Voice emotion model training | ✅ DONE (already existed) |
 | C-2 | Android Google Fit integration | ✅ DONE |
 | C-3 | Text emotion NLP model | ✅ DONE (already existed) |
-| D-1 | End-to-end integration tests | ⬜ TODO |
-| D-2 | Observability stack wiring | ⬜ TODO |
-| D-3 | Load testing | ⬜ TODO |
+| D-1 | End-to-end integration tests | ✅ DONE |
+| D-2 | Observability stack wiring | ✅ DONE |
+| D-3 | Load testing | ✅ DONE |
 | E-1 | CI/CD pipeline hardening | ✅ DONE |
 | E-2 | K8s production alignment | ✅ DONE |
 | E-3 | Product identity finalization | ✅ DONE |
