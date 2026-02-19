@@ -469,14 +469,14 @@ Phase IV: Web Dashboard
 
 | Phase | Item | Status |
 |-------|------|--------|
-| I | F-1: Personal history & life events | ⬜ TODO |
-| I | F-2: Family/household accounts | ⬜ TODO |
-| I | F-3: Push notification infrastructure | ⬜ TODO |
-| I | F-4: Onboarding flow | ⬜ TODO |
-| I | F-5: Achievement & gamification | ⬜ TODO |
-| II | F-6: Community forums & peer support | ⬜ TODO |
-| II | F-9: Content moderation system | ⬜ TODO |
-| III | F-7: Creative expression suite | ⬜ TODO |
-| III | F-8: Therapist marketplace & screening | ⬜ TODO |
-| III | F-10: Co-learning & education | ⬜ TODO |
-| IV | F-11: Web dashboard | ⬜ TODO |
+| I | F-1: Personal history & life events | ✅ DONE |
+| I | F-2: Family/household accounts | ✅ DONE |
+| I | F-3: Push notification infrastructure | ✅ DONE |
+| I | F-4: Onboarding flow | ✅ DONE |
+| I | F-5: Achievement & gamification | ✅ DONE |
+| II | F-6: Community forums & peer support | ✅ DONE |
+| II | F-9: Content moderation system | ✅ DONE |
+| III | F-7: Creative expression suite | ✅ DONE |
+| III | F-8: Therapist marketplace & screening | ✅ DONE |
+| III | F-10: Co-learning & education | ✅ DONE |
+| IV | F-11: Web dashboard | ⬜ DEFERRED — mobile app covers all user needs |
