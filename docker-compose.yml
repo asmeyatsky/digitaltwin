@@ -33,11 +33,22 @@ services:
       - Stripe__WebhookSecret=${STRIPE_WEBHOOK_SECRET}
       - Stripe__SuccessUrl=${STRIPE_SUCCESS_URL}
       - Stripe__CancelUrl=${STRIPE_CANCEL_URL}
+      - CORS__AllowedOrigins=http://localhost:3000,http://localhost:8081,http://localhost:19006,http://localhost:80
     depends_on:
-      - postgres
-      - redis
-      - rabbitmq
-      - deepface
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      deepface:
+        condition: service_healthy
+      avatar-generation:
+        condition: service_healthy
+      voice-service:
+        condition: service_healthy
+      llm-service:
+        condition: service_healthy
     volumes:
       - ./logs:/app/logs
       - ./data:/app/data
@@ -129,7 +140,8 @@ services:
       - ./nginx/ssl:/etc/nginx/ssl
       - ./logs/nginx:/var/log/nginx
     depends_on:
-      - api-gateway
+      api-gateway:
+        condition: service_healthy
     networks:
       - digitaltwin-network
     restart: unless-stopped

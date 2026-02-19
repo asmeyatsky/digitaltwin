@@ -88,7 +88,7 @@ namespace DigitalTwin.API.Controllers
                 var invite = await _familyService.InviteMemberAsync(GetUserId(), id, request.Email, request.Role);
                 return Ok(ApiResponse<FamilyInvite>.Ok(invite));
             }
-            catch (UnauthorizedAccessException ex)
+            catch (UnauthorizedAccessException)
             {
                 return Forbid();
             }

@@ -51,7 +51,7 @@ namespace DigitalTwin.API.Controllers
             {
                 return BadRequest(ApiResponse.Fail(ex.Message));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
@@ -77,7 +77,7 @@ namespace DigitalTwin.API.Controllers
             {
                 return BadRequest(ApiResponse.Fail(ex.Message));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
@@ -99,7 +99,7 @@ namespace DigitalTwin.API.Controllers
             {
                 return Unauthorized(ApiResponse.Fail("Invalid refresh token"));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
@@ -116,7 +116,7 @@ namespace DigitalTwin.API.Controllers
                 await _authService.LogoutAsync(request);
                 return Ok(ApiResponse.Ok("Logged out successfully"));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
@@ -143,7 +143,7 @@ namespace DigitalTwin.API.Controllers
             {
                 return BadRequest(ApiResponse.Fail("Invalid current password"));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
@@ -178,7 +178,7 @@ namespace DigitalTwin.API.Controllers
 
                 return Ok(ApiResponse<UserDTO>.Ok(user));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
@@ -209,7 +209,7 @@ namespace DigitalTwin.API.Controllers
 
                 return Ok(ApiResponse<UserDTO>.Ok(user));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
@@ -254,7 +254,7 @@ namespace DigitalTwin.API.Controllers
 
                 return Ok(ApiResponse<List<UserDTO>>.Ok(users));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
@@ -272,7 +272,7 @@ namespace DigitalTwin.API.Controllers
                 await _rbacService.AssignRoleAsync(userId, request.Role);
                 return Ok(ApiResponse.Ok("Role assigned successfully"));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
@@ -306,7 +306,7 @@ namespace DigitalTwin.API.Controllers
 
                 return Ok(ApiResponse<UserRole?>.Ok(role));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
@@ -335,7 +335,7 @@ namespace DigitalTwin.API.Controllers
                 var permissions = await _rbacService.GetUserPermissionsAsync(userId);
                 return Ok(ApiResponse<List<Permission>>.Ok(permissions));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
@@ -353,7 +353,7 @@ namespace DigitalTwin.API.Controllers
                 await _rbacService.GrantPermissionAsync(userId, request.Permission);
                 return Ok(ApiResponse.Ok("Permission granted successfully"));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
@@ -371,7 +371,7 @@ namespace DigitalTwin.API.Controllers
                 await _rbacService.RevokePermissionAsync(userId, permission);
                 return Ok(ApiResponse.Ok("Permission revoked successfully"));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
@@ -389,7 +389,7 @@ namespace DigitalTwin.API.Controllers
                 var roles = await _rbacService.GetAllRolePermissionsAsync();
                 return Ok(ApiResponse<Dictionary<UserRole, List<Permission>>>.Ok(roles));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
@@ -435,7 +435,7 @@ namespace DigitalTwin.API.Controllers
 
                 return Ok(ApiResponse<List<Core.Models.SecurityEvent>>.Ok(logs));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
@@ -482,7 +482,7 @@ namespace DigitalTwin.API.Controllers
 
                 return File(System.Text.Encoding.UTF8.GetBytes(csvData), "text/csv", filename);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }
@@ -499,7 +499,7 @@ namespace DigitalTwin.API.Controllers
                 var isValid = await _authService.ValidateTokenAsync(request.Token);
                 return Ok(ApiResponse<bool>.Ok(isValid));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return StatusCode(500, ApiResponse.Fail("Internal server error"));
             }

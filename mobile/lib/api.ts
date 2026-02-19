@@ -11,7 +11,7 @@ export interface ApiResponse<T> {
   success: boolean;
   data: T;
   message?: string;
-  errors?: string[];
+  error?: string;
 }
 
 // --- Auth DTOs (match server AuthController.cs) ---
@@ -43,83 +43,83 @@ export interface RegisterRequest {
 
 /** Raw shape returned by POST /api/auth/login */
 interface LoginResponseRaw {
-  Success: boolean;
-  Message?: string;
-  Token?: string;
-  RefreshToken?: string;
-  ExpiresIn: number;
-  User?: {
-    UserId: string;
-    Username: string;
-    Roles: string[];
+  success: boolean;
+  message?: string;
+  token?: string;
+  refreshToken?: string;
+  expiresIn: number;
+  user?: {
+    userId: string;
+    username: string;
+    roles: string[];
   };
 }
 
 /** Raw shape returned by POST /api/auth/register */
 interface RegisterResponseRaw {
-  Success: boolean;
-  Message?: string;
-  Token?: string;
-  RefreshToken?: string;
-  User?: {
-    UserId: string;
-    Username: string;
-    Roles: string[];
+  success: boolean;
+  message?: string;
+  token?: string;
+  refreshToken?: string;
+  user?: {
+    userId: string;
+    username: string;
+    roles: string[];
   };
-  Errors?: string[];
+  errors?: string[];
 }
 
 /** Raw shape returned by POST /api/auth/refresh */
 interface TokenRefreshResponseRaw {
-  Success: boolean;
-  Message?: string;
-  Token?: string;
-  RefreshToken?: string;
-  ExpiresIn: number;
+  success: boolean;
+  message?: string;
+  token?: string;
+  refreshToken?: string;
+  expiresIn: number;
 }
 
 // --- Conversation DTOs (match server ConversationController.cs) ---
 
 export interface ConversationStartResponse {
-  SessionId: string;
-  Response: string;
-  EmotionalTone: string;
-  Timestamp: string;
+  sessionId: string;
+  response: string;
+  emotionalTone: string;
+  timestamp: string;
 }
 
 export interface ConversationMessageRequest {
-  ConversationId: string;
-  Message: string;
+  conversationId: string;
+  message: string;
 }
 
 export interface ConversationMessageResponse {
-  Response: string;
-  DetectedEmotion: string;
-  AIEmotionalTone: string;
-  ResponseTime: string;
-  ConversationId: string;
+  response: string;
+  detectedEmotion: string;
+  aiEmotionalTone: string;
+  responseTime: string;
+  conversationId: string;
 }
 
 export interface ConversationMessage {
-  Id: string;
-  Content: string;
-  Response?: string;
-  UserEmotion: string;
-  AIEmotion?: string;
-  Timestamp: string;
-  MessageType: string;
+  id: string;
+  content: string;
+  response?: string;
+  userEmotion: string;
+  aiEmotion?: string;
+  timestamp: string;
+  messageType: string;
 }
 
 export interface ConversationHistoryResponse {
-  Messages: ConversationMessage[];
-  TotalCount: number;
-  Page: number;
-  PageSize: number;
+  messages: ConversationMessage[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
 }
 
 export interface ConversationEndRequest {
-  ConversationId: string;
-  SessionDuration?: string; // TimeSpan serialised as string
+  conversationId: string;
+  sessionDuration?: string; // TimeSpan serialised as string
 }
 
 // --- Legacy types kept for other parts of the app ---
@@ -155,16 +155,16 @@ export interface Conversation {
 }
 
 export interface SendMessageRequest {
-  ConversationId: string;
-  Message: string;
+  conversationId: string;
+  message: string;
 }
 
 export interface SendMessageResponse {
-  Response: string;
-  DetectedEmotion: string;
-  AIEmotionalTone: string;
-  ResponseTime: string;
-  ConversationId: string;
+  response: string;
+  detectedEmotion: string;
+  aiEmotionalTone: string;
+  responseTime: string;
+  conversationId: string;
 }
 
 export interface EmotionInsights {
@@ -311,8 +311,8 @@ async function silentRefresh(): Promise<boolean> {
     if (!res.ok) return false;
 
     const body = (await res.json()) as TokenRefreshResponseRaw;
-    if (body.Success && body.Token && body.RefreshToken) {
-      useAuthStore.getState().setTokens(body.Token, body.RefreshToken);
+    if (body.success && body.token && body.refreshToken) {
+      useAuthStore.getState().setTokens(body.token, body.refreshToken);
       return true;
     }
     return false;
@@ -420,20 +420,20 @@ export async function login(
 
   const raw: LoginResponseRaw = await res.json();
 
-  if (!res.ok || !raw.Success) {
-    throw new Error(raw.Message ?? `Login failed with status ${res.status}`);
+  if (!res.ok || !raw.success) {
+    throw new Error(raw.message ?? `Login failed with status ${res.status}`);
   }
 
   return {
     success: true,
     data: {
-      accessToken: raw.Token!,
-      refreshToken: raw.RefreshToken!,
-      expiresIn: raw.ExpiresIn,
+      accessToken: raw.token!,
+      refreshToken: raw.refreshToken!,
+      expiresIn: raw.expiresIn,
       user: {
-        id: raw.User!.UserId,
-        username: raw.User!.Username,
-        roles: raw.User!.Roles,
+        id: raw.user!.userId,
+        username: raw.user!.username,
+        roles: raw.user!.roles,
       },
     },
   };
@@ -454,12 +454,12 @@ export async function register(
 
   const raw: RegisterResponseRaw = await res.json();
 
-  if (!res.ok || !raw.Success) {
+  if (!res.ok || !raw.success) {
     const err: ApiResponse<never> = {
       success: false,
       data: undefined as never,
-      message: raw.Message ?? `Registration failed with status ${res.status}`,
-      errors: raw.Errors,
+      message: raw.message ?? `Registration failed with status ${res.status}`,
+      error: raw.errors?.[0],
     };
     throw Object.assign(new Error(err.message!), { response: err });
   }
@@ -467,13 +467,13 @@ export async function register(
   return {
     success: true,
     data: {
-      accessToken: raw.Token!,
-      refreshToken: raw.RefreshToken!,
+      accessToken: raw.token!,
+      refreshToken: raw.refreshToken!,
       expiresIn: 3600,
       user: {
-        id: raw.User!.UserId,
-        username: raw.User!.Username,
-        roles: raw.User!.Roles,
+        id: raw.user!.userId,
+        username: raw.user!.username,
+        roles: raw.user!.roles,
       },
     },
   };
@@ -494,16 +494,16 @@ export async function refreshToken(
 
   const raw: TokenRefreshResponseRaw = await res.json();
 
-  if (!res.ok || !raw.Success) {
-    throw new Error(raw.Message ?? `Token refresh failed with status ${res.status}`);
+  if (!res.ok || !raw.success) {
+    throw new Error(raw.message ?? `Token refresh failed with status ${res.status}`);
   }
 
   return {
     success: true,
     data: {
-      accessToken: raw.Token!,
-      refreshToken: raw.RefreshToken!,
-      expiresIn: raw.ExpiresIn,
+      accessToken: raw.token!,
+      refreshToken: raw.refreshToken!,
+      expiresIn: raw.expiresIn,
     },
   };
 }
@@ -538,8 +538,8 @@ export async function sendMessage(
   return request<ConversationMessageResponse>("/api/conversation/message", {
     method: "POST",
     body: JSON.stringify({
-      ConversationId: conversationId,
-      Message: message,
+      conversationId: conversationId,
+      message: message,
     } satisfies SendMessageRequest),
   });
 }
@@ -571,8 +571,8 @@ export async function endConversation(
   return request<void>("/api/conversation/end", {
     method: "POST",
     body: JSON.stringify({
-      ConversationId: conversationId,
-      SessionDuration: sessionDuration,
+      conversationId: conversationId,
+      sessionDuration: sessionDuration,
     } satisfies ConversationEndRequest),
   });
 }

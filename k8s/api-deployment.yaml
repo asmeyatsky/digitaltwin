@@ -62,6 +62,29 @@ spec:
           value: "http://digitaltwin-avatar-service:8002"
         - name: Services__Voice__BaseUrl
           value: "http://digitaltwin-voice-service:8003"
+        - name: Services__ServiceKey
+          valueFrom:
+            secretKeyRef:
+              name: digitaltwin-secrets
+              key: service-key
+        - name: Encryption__Key
+          valueFrom:
+            secretKeyRef:
+              name: digitaltwin-secrets
+              key: encryption-key
+        - name: Stripe__SecretKey
+          valueFrom:
+            secretKeyRef:
+              name: digitaltwin-secrets
+              key: stripe-secret-key
+        - name: OTEL__ExporterOtlpEndpoint
+          value: "http://digitaltwin-jaeger-service:4317"
+        - name: CORS__AllowedOrigins
+          valueFrom:
+            configMapKeyRef:
+              name: digitaltwin-config
+              key: cors-origins
+              optional: true
         resources:
           requests:
             memory: "256Mi"

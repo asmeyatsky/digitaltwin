@@ -316,13 +316,13 @@ namespace DigitalTwin.Core.Services
                 .ToList();
 
             // Update communication patterns
-            UpdateCommunicationPatterns(profile, patterns);
+            await UpdateCommunicationPatterns(profile, patterns);
 
             // Update preference patterns
-            UpdatePreferencePatterns(profile, patterns);
+            await UpdatePreferencePatterns(profile, patterns);
 
             // Update emotional patterns
-            UpdateEmotionalPatterns(profile, patterns);
+            await UpdateEmotionalPatterns(profile, patterns);
         }
 
         private async Task LearnFromInteraction(AITwinProfile profile, AITwinInteraction interaction, AITwinResponse response)

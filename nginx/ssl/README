@@ -1,0 +1,13 @@
+Place your SSL certificate files in this directory:
+
+  cert.pem  - Your SSL certificate (or full chain)
+  key.pem   - Your SSL private key
+
+These files are referenced by the nginx configuration and are required
+for HTTPS to work. They are excluded from version control for security.
+
+For local development you can generate a self-signed certificate:
+
+  openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    -keyout key.pem -out cert.pem \
+    -subj "/CN=localhost"

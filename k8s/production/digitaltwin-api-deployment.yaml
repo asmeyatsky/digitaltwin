@@ -108,6 +108,8 @@ spec:
               name: digitaltwin-secrets
               key: stripe-secret-key
               optional: true
+        - name: OTEL__ExporterOtlpEndpoint
+          value: "http://digitaltwin-jaeger-service:4317"
         - name: CORS__AllowedOrigins
           valueFrom:
             configMapKeyRef:

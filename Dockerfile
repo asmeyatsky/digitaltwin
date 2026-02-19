@@ -20,12 +20,10 @@ WORKDIR /src
 # Copy project files
 COPY ["src/API/DigitalTwin.API/DigitalTwin.API.csproj", "src/API/DigitalTwin.API/"]
 COPY ["src/Core/DigitalTwin.Core/DigitalTwin.Core.csproj", "src/Core/DigitalTwin.Core/"]
-COPY ["src/Infrastructure/DigitalTwin.Infrastructure/DigitalTwin.Infrastructure.csproj", "src/Infrastructure/DigitalTwin.Infrastructure/"]
 
 # Restore NuGet packages
 RUN dotnet restore "src/API/DigitalTwin.API/DigitalTwin.API.csproj"
 RUN dotnet restore "src/Core/DigitalTwin.Core/DigitalTwin.Core.csproj"
-RUN dotnet restore "src/Infrastructure/DigitalTwin.Infrastructure/DigitalTwin.Infrastructure.csproj"
 
 # Copy all source files
 COPY . .

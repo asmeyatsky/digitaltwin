@@ -69,24 +69,28 @@ export async function syncAvatar(
 }
 
 export type CompanionEventHandlers = {
-  onUserJoined?: (data: { userId: string; roomId: string }) => void;
-  onUserLeft?: (data: { userId: string; roomId: string }) => void;
+  onUserJoined?: (data: { userId: string; roomId: string; timestamp?: string }) => void;
+  onUserLeft?: (data: { userId: string; roomId: string; timestamp?: string }) => void;
   onReceiveMessage?: (data: {
     userId: string;
     roomId: string;
     message: string;
+    timestamp?: string;
   }) => void;
   onEmotionShared?: (data: {
     userId: string;
     roomId: string;
     emotion: string;
     confidence: number;
+    timestamp?: string;
   }) => void;
   onAvatarSync?: (data: {
     userId: string;
     roomId: string;
     avatarState: Record<string, unknown>;
+    timestamp?: string;
   }) => void;
+  onError?: (data: { message: string; code?: string; timestamp?: string }) => void;
 };
 
 export function registerHandlers(handlers: CompanionEventHandlers): void {
@@ -97,6 +101,7 @@ export function registerHandlers(handlers: CompanionEventHandlers): void {
   if (handlers.onReceiveMessage) conn.on("ReceiveMessage", handlers.onReceiveMessage);
   if (handlers.onEmotionShared) conn.on("EmotionShared", handlers.onEmotionShared);
   if (handlers.onAvatarSync) conn.on("AvatarSync", handlers.onAvatarSync);
+  if (handlers.onError) conn.on("Error", handlers.onError);
 }
 
 export function unregisterHandlers(): void {
@@ -106,4 +111,5 @@ export function unregisterHandlers(): void {
   conn.off("ReceiveMessage");
   conn.off("EmotionShared");
   conn.off("AvatarSync");
+  conn.off("Error");
 }
