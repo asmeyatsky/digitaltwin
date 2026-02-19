@@ -1312,3 +1312,438 @@ export async function reportContent(
     }),
   });
 }
+
+// ---------------------------------------------------------------------------
+// Creative Expression Suite API
+// ---------------------------------------------------------------------------
+
+export type CreativeWorkType =
+  | "Story"
+  | "Poem"
+  | "Reflection"
+  | "Gratitude"
+  | "Letter"
+  | "FreeWrite";
+
+export interface CreativeWork {
+  id: string;
+  userId: string;
+  type: CreativeWorkType;
+  title: string;
+  content: string;
+  mood: EmotionType;
+  isShared: boolean;
+  sharedToGroupId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreativeWorksResponse {
+  works: CreativeWork[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface CollaborativeStory {
+  id: string;
+  roomId: string;
+  title: string;
+  createdByUserId: string;
+  createdAt: string;
+}
+
+export interface StoryChapter {
+  id: string;
+  storyId: string;
+  authorUserId: string;
+  content: string;
+  chapterOrder: number;
+  createdAt: string;
+}
+
+export interface CollaborativeStoryDetail {
+  story: CollaborativeStory;
+  chapters: StoryChapter[];
+}
+
+export interface CreativePromptResponse {
+  prompt: string;
+  type: CreativeWorkType;
+}
+
+export async function createCreativeWork(
+  type: CreativeWorkType,
+  title: string,
+  content: string,
+  mood: EmotionType
+): Promise<ApiResponse<CreativeWork>> {
+  return request<CreativeWork>("/api/creative/works", {
+    method: "POST",
+    body: JSON.stringify({ Type: type, Title: title, Content: content, Mood: mood }),
+  });
+}
+
+export async function getCreativeWorks(
+  type?: CreativeWorkType,
+  page: number = 1,
+  pageSize: number = 20
+): Promise<ApiResponse<CreativeWorksResponse>> {
+  const params = new URLSearchParams();
+  if (type) params.set("type", type);
+  params.set("page", String(page));
+  params.set("pageSize", String(pageSize));
+  return request<CreativeWorksResponse>(
+    `/api/creative/works?${params.toString()}`
+  );
+}
+
+export async function getCreativeWorkById(
+  id: string
+): Promise<ApiResponse<CreativeWork>> {
+  return request<CreativeWork>(`/api/creative/works/${id}`);
+}
+
+export async function updateCreativeWork(
+  id: string,
+  title: string,
+  content: string,
+  mood: EmotionType
+): Promise<ApiResponse<CreativeWork>> {
+  return request<CreativeWork>(`/api/creative/works/${id}`, {
+    method: "PUT",
+    body: JSON.stringify({ Title: title, Content: content, Mood: mood }),
+  });
+}
+
+export async function deleteCreativeWork(
+  id: string
+): Promise<ApiResponse<void>> {
+  return request<void>(`/api/creative/works/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export async function shareCreativeWork(
+  id: string,
+  groupId?: string
+): Promise<ApiResponse<CreativeWork>> {
+  return request<CreativeWork>(`/api/creative/works/${id}/share`, {
+    method: "POST",
+    body: JSON.stringify({ GroupId: groupId }),
+  });
+}
+
+export async function getSharedCreativeWorks(
+  groupId?: string,
+  page: number = 1,
+  pageSize: number = 20
+): Promise<ApiResponse<CreativeWorksResponse>> {
+  const params = new URLSearchParams();
+  if (groupId) params.set("groupId", groupId);
+  params.set("page", String(page));
+  params.set("pageSize", String(pageSize));
+  return request<CreativeWorksResponse>(
+    `/api/creative/shared?${params.toString()}`
+  );
+}
+
+export async function generateCreativePrompt(
+  type: CreativeWorkType
+): Promise<ApiResponse<CreativePromptResponse>> {
+  return request<CreativePromptResponse>("/api/creative/prompt", {
+    method: "POST",
+    body: JSON.stringify({ Type: type }),
+  });
+}
+
+export async function startCollaborativeStory(
+  roomId: string,
+  title: string
+): Promise<ApiResponse<CollaborativeStory>> {
+  return request<CollaborativeStory>("/api/creative/stories", {
+    method: "POST",
+    body: JSON.stringify({ RoomId: roomId, Title: title }),
+  });
+}
+
+export async function addStoryChapter(
+  storyId: string,
+  content: string
+): Promise<ApiResponse<StoryChapter>> {
+  return request<StoryChapter>(`/api/creative/stories/${storyId}/chapters`, {
+    method: "POST",
+    body: JSON.stringify({ Content: content }),
+  });
+}
+
+export async function getCollaborativeStory(
+  storyId: string
+): Promise<ApiResponse<CollaborativeStoryDetail>> {
+  return request<CollaborativeStoryDetail>(`/api/creative/stories/${storyId}`);
+}
+
+// ---------------------------------------------------------------------------
+// Therapy Marketplace & Clinical Screening API
+// ---------------------------------------------------------------------------
+
+export type SessionStatus = "Scheduled" | "Completed" | "Cancelled" | "NoShow";
+export type ScreeningType = "PHQ9" | "GAD7" | "PSS10" | "WHO5";
+export type ReferralUrgency = "Low" | "Medium" | "High" | "Critical";
+
+export interface TherapistProfile {
+  id: string;
+  userId: string;
+  name: string;
+  credentials: string;
+  bio: string;
+  specializations: string; // JSON array
+  availability: string; // JSON
+  ratePerSession: number;
+  isVerified: boolean;
+  createdAt: string;
+}
+
+export interface TherapySession {
+  id: string;
+  therapistId: string;
+  clientUserId: string;
+  scheduledAt: string;
+  durationMinutes: number;
+  status: SessionStatus;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface ClinicalScreening {
+  id: string;
+  userId: string;
+  type: ScreeningType;
+  responses: string; // JSON array of ints
+  score: number;
+  severity: string;
+  completedAt: string;
+}
+
+export interface TherapistReferral {
+  id: string;
+  userId: string;
+  reason: string;
+  urgency: ReferralUrgency;
+  isAcknowledged: boolean;
+  createdAt: string;
+}
+
+export interface TherapistsResponse {
+  therapists: TherapistProfile[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface TherapySessionsResponse {
+  sessions: TherapySession[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface ScreeningQuestionsResponse {
+  type: string;
+  questions: string[];
+}
+
+export async function getTherapists(
+  specialization?: string,
+  page: number = 1,
+  pageSize: number = 20
+): Promise<ApiResponse<TherapistsResponse>> {
+  const params = new URLSearchParams();
+  if (specialization) params.set("specialization", specialization);
+  params.set("page", String(page));
+  params.set("pageSize", String(pageSize));
+  return request<TherapistsResponse>(
+    `/api/therapy/therapists?${params.toString()}`
+  );
+}
+
+export async function getTherapistById(
+  id: string
+): Promise<ApiResponse<TherapistProfile>> {
+  return request<TherapistProfile>(`/api/therapy/therapists/${id}`);
+}
+
+export async function bookTherapySession(
+  therapistId: string,
+  scheduledAt: string
+): Promise<ApiResponse<TherapySession>> {
+  return request<TherapySession>("/api/therapy/sessions", {
+    method: "POST",
+    body: JSON.stringify({ TherapistId: therapistId, ScheduledAt: scheduledAt }),
+  });
+}
+
+export async function cancelTherapySession(
+  sessionId: string
+): Promise<ApiResponse<void>> {
+  return request<void>(`/api/therapy/sessions/${sessionId}/cancel`, {
+    method: "POST",
+  });
+}
+
+export async function getTherapySessions(
+  page: number = 1,
+  pageSize: number = 20
+): Promise<ApiResponse<TherapySessionsResponse>> {
+  return request<TherapySessionsResponse>(
+    `/api/therapy/sessions?page=${page}&pageSize=${pageSize}`
+  );
+}
+
+export async function getScreeningQuestions(
+  type: ScreeningType
+): Promise<ApiResponse<ScreeningQuestionsResponse>> {
+  return request<ScreeningQuestionsResponse>(
+    `/api/therapy/screening/${type}/questions`
+  );
+}
+
+export async function submitScreening(
+  type: ScreeningType,
+  responses: number[]
+): Promise<ApiResponse<ClinicalScreening>> {
+  return request<ClinicalScreening>(`/api/therapy/screening/${type}/submit`, {
+    method: "POST",
+    body: JSON.stringify({ Responses: responses }),
+  });
+}
+
+export async function getScreeningHistory(): Promise<
+  ApiResponse<ClinicalScreening[]>
+> {
+  return request<ClinicalScreening[]>("/api/therapy/screening/history");
+}
+
+export async function getTherapistReferrals(): Promise<
+  ApiResponse<TherapistReferral[]>
+> {
+  return request<TherapistReferral[]>("/api/therapy/referrals");
+}
+
+// ---------------------------------------------------------------------------
+// Co-Learning & Education API
+// ---------------------------------------------------------------------------
+
+export type LearningCategory =
+  | "EmotionalIntelligence"
+  | "Mindfulness"
+  | "Communication"
+  | "StressManagement"
+  | "Resilience"
+  | "SelfCare";
+
+export interface LearningPath {
+  id: string;
+  title: string;
+  description: string;
+  category: LearningCategory;
+  estimatedMinutes: number;
+  moduleCount: number;
+  createdAt: string;
+}
+
+export interface LearningModule {
+  id: string;
+  pathId: string;
+  title: string;
+  content: string;
+  exercisePrompt: string;
+  order: number;
+}
+
+export interface UserLearningProgress {
+  id: string;
+  userId: string;
+  pathId: string;
+  currentModuleIndex: number;
+  completedModules: string; // JSON array of ints
+  reflectionNotes: string; // JSON object
+  startedAt: string;
+  completedAt: string | null;
+}
+
+export interface LearningPathsResponse {
+  paths: LearningPath[];
+}
+
+export interface LearningPathDetailResponse {
+  path: LearningPath;
+  modules: LearningModule[];
+}
+
+export interface LearningCurrentModuleResponse {
+  module: LearningModule | null;
+  progress: UserLearningProgress;
+}
+
+export interface LearningProgressResponse {
+  progress: UserLearningProgress[];
+}
+
+export async function getLearningPaths(
+  category?: LearningCategory
+): Promise<ApiResponse<LearningPathsResponse>> {
+  const params = new URLSearchParams();
+  if (category) params.set("category", category);
+  const qs = params.toString();
+  return request<LearningPathsResponse>(
+    `/api/learning/paths${qs ? `?${qs}` : ""}`
+  );
+}
+
+export async function getLearningPathById(
+  pathId: string
+): Promise<ApiResponse<LearningPathDetailResponse>> {
+  return request<LearningPathDetailResponse>(`/api/learning/paths/${pathId}`);
+}
+
+export async function startLearningPath(
+  pathId: string
+): Promise<ApiResponse<UserLearningProgress>> {
+  return request<UserLearningProgress>(`/api/learning/paths/${pathId}/start`, {
+    method: "POST",
+  });
+}
+
+export async function getCurrentLearningModule(
+  pathId: string
+): Promise<ApiResponse<LearningCurrentModuleResponse>> {
+  return request<LearningCurrentModuleResponse>(
+    `/api/learning/paths/${pathId}/current`
+  );
+}
+
+export async function completeLearningModule(
+  pathId: string,
+  reflectionNotes?: string
+): Promise<ApiResponse<UserLearningProgress>> {
+  return request<UserLearningProgress>(
+    `/api/learning/paths/${pathId}/complete-module`,
+    {
+      method: "POST",
+      body: JSON.stringify({ ReflectionNotes: reflectionNotes }),
+    }
+  );
+}
+
+export async function getLearningProgress(): Promise<
+  ApiResponse<LearningProgressResponse>
+> {
+  return request<LearningProgressResponse>("/api/learning/progress");
+}
+
+export async function getSuggestedLearningPath(): Promise<
+  ApiResponse<LearningPath | null>
+> {
+  return request<LearningPath | null>("/api/learning/suggested");
+}

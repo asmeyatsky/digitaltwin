@@ -79,9 +79,25 @@ namespace DigitalTwin.Core.Data
         public DbSet<CommunityReply> CommunityReplies { get; set; }
         public DbSet<CommunityMembership> CommunityMemberships { get; set; }
 
+        // Creative Expression Entities
+        public DbSet<CreativeWork> CreativeWorks { get; set; }
+        public DbSet<CollaborativeStory> CollaborativeStories { get; set; }
+        public DbSet<StoryChapter> StoryChapters { get; set; }
+
+        // Therapy / Clinical Screening Entities
+        public DbSet<TherapistProfile> TherapistProfiles { get; set; }
+        public DbSet<TherapySession> TherapySessions { get; set; }
+        public DbSet<ClinicalScreening> ClinicalScreenings { get; set; }
+        public DbSet<TherapistReferral> TherapistReferrals { get; set; }
+
         // Moderation Entities
         public DbSet<ContentReport> ContentReports { get; set; }
         public DbSet<AutoModerationResult> AutoModerationResults { get; set; }
+
+        // Learning Entities
+        public DbSet<LearningPath> LearningPaths { get; set; }
+        public DbSet<LearningModule> LearningModules { get; set; }
+        public DbSet<UserLearningProgress> UserLearningProgress { get; set; }
 
         // Notification Entities
         public DbSet<DeviceToken> DeviceTokens { get; set; }
@@ -495,6 +511,132 @@ namespace DigitalTwin.Core.Data
                 entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
                 entity.HasIndex(e => new { e.ContentType, e.ContentId });
                 entity.HasIndex(e => e.IsFlagged);
+            });
+
+            // Configure CreativeWork
+            modelBuilder.Entity<CreativeWork>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Title).IsRequired().HasMaxLength(300);
+                entity.Property(e => e.Content).IsRequired();
+                entity.Property(e => e.Type).IsRequired()
+                    .HasConversion<string>().HasMaxLength(20);
+                entity.Property(e => e.Mood).IsRequired()
+                    .HasConversion<string>().HasMaxLength(20);
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => e.UserId);
+                entity.HasIndex(e => new { e.UserId, e.Type });
+                entity.HasIndex(e => e.IsShared);
+                entity.HasIndex(e => e.SharedToGroupId);
+            });
+
+            // Configure CollaborativeStory
+            modelBuilder.Entity<CollaborativeStory>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Title).IsRequired().HasMaxLength(300);
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => e.RoomId);
+                entity.HasIndex(e => e.CreatedByUserId);
+            });
+
+            // Configure StoryChapter
+            modelBuilder.Entity<StoryChapter>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Content).IsRequired();
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => e.StoryId);
+                entity.HasIndex(e => new { e.StoryId, e.ChapterOrder });
+            });
+
+            // Configure TherapistProfile
+            modelBuilder.Entity<TherapistProfile>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.Credentials).HasMaxLength(500);
+                entity.Property(e => e.Bio).HasMaxLength(4000);
+                entity.Property(e => e.Specializations).HasMaxLength(2000);
+                entity.Property(e => e.Availability).HasMaxLength(4000);
+                entity.Property(e => e.RatePerSession).HasPrecision(10, 2);
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => e.UserId).IsUnique();
+                entity.HasIndex(e => e.IsVerified);
+            });
+
+            // Configure TherapySession
+            modelBuilder.Entity<TherapySession>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Status).IsRequired()
+                    .HasConversion<string>().HasMaxLength(20);
+                entity.Property(e => e.Notes).HasMaxLength(4000);
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => e.TherapistId);
+                entity.HasIndex(e => e.ClientUserId);
+                entity.HasIndex(e => new { e.ClientUserId, e.ScheduledAt });
+            });
+
+            // Configure ClinicalScreening
+            modelBuilder.Entity<ClinicalScreening>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Type).IsRequired()
+                    .HasConversion<string>().HasMaxLength(10);
+                entity.Property(e => e.Responses).HasMaxLength(500);
+                entity.Property(e => e.Severity).HasMaxLength(30);
+                entity.Property(e => e.CompletedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => e.UserId);
+                entity.HasIndex(e => new { e.UserId, e.Type });
+            });
+
+            // Configure TherapistReferral
+            modelBuilder.Entity<TherapistReferral>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Reason).IsRequired().HasMaxLength(2000);
+                entity.Property(e => e.Urgency).IsRequired()
+                    .HasConversion<string>().HasMaxLength(20);
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => e.UserId);
+                entity.HasIndex(e => e.Urgency);
+            });
+
+            // Configure LearningPath
+            modelBuilder.Entity<LearningPath>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Title).IsRequired().HasMaxLength(300);
+                entity.Property(e => e.Description).HasMaxLength(4000);
+                entity.Property(e => e.Category).IsRequired()
+                    .HasConversion<string>().HasMaxLength(30);
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => e.Category);
+            });
+
+            // Configure LearningModule
+            modelBuilder.Entity<LearningModule>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Title).IsRequired().HasMaxLength(300);
+                entity.Property(e => e.Content).IsRequired();
+                entity.Property(e => e.ExercisePrompt).HasMaxLength(4000);
+                entity.HasIndex(e => e.PathId);
+                entity.HasIndex(e => new { e.PathId, e.Order });
+            });
+
+            // Configure UserLearningProgress
+            modelBuilder.Entity<UserLearningProgress>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.CompletedModules).HasMaxLength(2000);
+                entity.Property(e => e.ReflectionNotes).HasMaxLength(8000);
+                entity.Property(e => e.StartedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => e.UserId);
+                entity.HasIndex(e => e.PathId);
+                entity.HasIndex(e => new { e.UserId, e.PathId }).IsUnique();
             });
 
             // Add indexes for performance
