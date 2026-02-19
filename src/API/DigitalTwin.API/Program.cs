@@ -8,7 +8,9 @@ using DigitalTwin.Core.Interfaces;
 using DigitalTwin.Core.Services;
 using DigitalTwin.Core.Plugins;
 using DigitalTwin.API.Middleware;
-using System.Text;
+using DigitalTwin.API.Hubs;
+using DigitalTwin.API.Services;
+using System.Security.Cryptography;
 
 namespace DigitalTwin.API
 {
@@ -71,22 +73,51 @@ namespace DigitalTwin.API
             builder.Services.AddDbContext<DigitalTwinDbContext>(options =>
                 options.UseNpgsql(connectionString));
 
-            // JWT Authentication — standardized env vars
-            var jwtKey = Environment.GetEnvironmentVariable("JwtConfiguration__SecretKey")
-                ?? builder.Configuration["JwtConfiguration:SecretKey"];
-            if (string.IsNullOrEmpty(jwtKey))
-            {
-                if (builder.Environment.IsDevelopment())
-                    jwtKey = "ThisIsASecretKeyForDevelopmentUseOnly123456789012345678901234567890";
-                else
-                    throw new InvalidOperationException("JwtConfiguration__SecretKey must be set in production");
-            }
+            // JWT Authentication — RS256 asymmetric signing (AD-1 security fix)
             var jwtIssuer = Environment.GetEnvironmentVariable("JwtConfiguration__Issuer")
                 ?? builder.Configuration["JwtConfiguration:Issuer"]
                 ?? "DigitalTwin";
             var jwtAudience = Environment.GetEnvironmentVariable("JwtConfiguration__Audience")
                 ?? builder.Configuration["JwtConfiguration:Audience"]
                 ?? "DigitalTwin";
+
+            // Load RSA key for RS256 — private key path for signing, public for validation
+            var rsaPrivateKeyPath = Environment.GetEnvironmentVariable("JwtConfiguration__PrivateKeyPath")
+                ?? builder.Configuration["JwtConfiguration:PrivateKeyPath"];
+            var rsaPublicKeyPath = Environment.GetEnvironmentVariable("JwtConfiguration__PublicKeyPath")
+                ?? builder.Configuration["JwtConfiguration:PublicKeyPath"];
+
+            SecurityKey jwtSigningKey;
+            var rsa = RSA.Create();
+
+            if (!string.IsNullOrEmpty(rsaPrivateKeyPath) && File.Exists(rsaPrivateKeyPath))
+            {
+                var privateKeyPem = File.ReadAllText(rsaPrivateKeyPath);
+                rsa.ImportFromPem(privateKeyPem);
+                jwtSigningKey = new RsaSecurityKey(rsa);
+            }
+            else if (!string.IsNullOrEmpty(rsaPublicKeyPath) && File.Exists(rsaPublicKeyPath))
+            {
+                var publicKeyPem = File.ReadAllText(rsaPublicKeyPath);
+                rsa.ImportFromPem(publicKeyPem);
+                jwtSigningKey = new RsaSecurityKey(rsa);
+            }
+            else if (builder.Environment.IsDevelopment())
+            {
+                // Development fallback: generate ephemeral RSA key pair
+                jwtSigningKey = new RsaSecurityKey(rsa);
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    "JwtConfiguration__PrivateKeyPath or JwtConfiguration__PublicKeyPath must be set in production");
+            }
+
+            // Store RSA instance for token generation in JwtAuthenticationService
+            builder.Services.AddSingleton(new JwtSigningCredentials(
+                new SigningCredentials(jwtSigningKey, SecurityAlgorithms.RsaSha256),
+                jwtIssuer,
+                jwtAudience));
 
             builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 .AddJwtBearer(options =>
@@ -99,11 +130,29 @@ namespace DigitalTwin.API
                         ValidateIssuerSigningKey = true,
                         ValidIssuer = jwtIssuer,
                         ValidAudience = jwtAudience,
-                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+                        IssuerSigningKey = jwtSigningKey
+                    };
+
+                    // Allow SignalR to receive JWT via query string
+                    options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
+                    {
+                        OnMessageReceived = context =>
+                        {
+                            var accessToken = context.Request.Query["access_token"];
+                            var path = context.HttpContext.Request.Path;
+                            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                            {
+                                context.Token = accessToken;
+                            }
+                            return Task.CompletedTask;
+                        }
                     };
                 });
 
             builder.Services.AddAuthorization();
+
+            // SignalR for real-time communication (shared experiences, emotion streaming)
+            builder.Services.AddSignalR();
 
             // Distributed cache — Redis in production, in-memory for development
             var redisConnection = Environment.GetEnvironmentVariable("Redis__ConnectionString");
@@ -187,6 +236,22 @@ namespace DigitalTwin.API
             builder.Services.AddScoped<ICompanionPlugin, PersonalityPlugin>();
             builder.Services.AddScoped<IPluginManager, PluginManager>();
 
+            // Biometric, coaching, shared experience services
+            builder.Services.AddScoped<IBiometricService, BiometricService>();
+            builder.Services.AddScoped<ICoachingService, CoachingService>();
+            builder.Services.AddScoped<ISharedExperienceService, SharedExperienceService>();
+
+            // Event bus — RabbitMQ in production, in-memory fallback for dev
+            var rabbitMqConnection = Environment.GetEnvironmentVariable("RabbitMQ__ConnectionString");
+            if (!string.IsNullOrEmpty(rabbitMqConnection))
+            {
+                builder.Services.AddSingleton<IEventBus, RabbitMqEventBus>();
+            }
+            else
+            {
+                builder.Services.AddSingleton<IEventBus, InMemoryEventBus>();
+            }
+
             // CORS — restrict in production
             var allowedOrigins = Environment.GetEnvironmentVariable("CORS__AllowedOrigins")?.Split(',')
                 ?? new[] { "http://localhost:3000", "http://localhost:8081", "http://localhost:19006" };
@@ -224,6 +289,7 @@ namespace DigitalTwin.API
 
             app.MapControllers();
             app.MapMetrics();
+            app.MapHub<CompanionHub>("/hubs/companion");
 
             app.MapGet("/health", () => new
             {

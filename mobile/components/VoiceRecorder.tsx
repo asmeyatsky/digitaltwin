@@ -8,54 +8,27 @@ import {
 } from "react-native";
 import { Audio } from "expo-av";
 import * as Haptics from "expo-haptics";
+import * as api from "../lib/api";
 
 interface VoiceRecorderProps {
   onRecordingComplete: (audioBase64: string) => void;
+  onTranscription?: (text: string) => void;
   disabled?: boolean;
 }
 
+const SILENCE_THRESHOLD_DB = -40;
+const SILENCE_DURATION_MS = 2000;
+
 export default function VoiceRecorder({
   onRecordingComplete,
+  onTranscription,
   disabled = false,
 }: VoiceRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
   const recordingRef = useRef<Audio.Recording | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const startRecording = useCallback(async () => {
-    if (disabled) return;
-
-    try {
-      const permission = await Audio.requestPermissionsAsync();
-      if (!permission.granted) {
-        return;
-      }
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-
-      recordingRef.current = recording;
-      setIsRecording(true);
-      setDuration(0);
-
-      if (Platform.OS !== "web") {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      }
-
-      timerRef.current = setInterval(() => {
-        setDuration((d) => d + 1);
-      }, 1000);
-    } catch (err) {
-      console.error("Failed to start recording:", err);
-    }
-  }, [disabled]);
+  const silenceStartRef = useRef<number | null>(null);
 
   const stopRecording = useCallback(async () => {
     if (!recordingRef.current) return;
@@ -66,6 +39,7 @@ export default function VoiceRecorder({
         timerRef.current = null;
       }
 
+      silenceStartRef.current = null;
       setIsRecording(false);
       setDuration(0);
 
@@ -87,6 +61,18 @@ export default function VoiceRecorder({
           }
         };
         reader.readAsDataURL(blob);
+
+        // Attempt STT transcription
+        if (onTranscription) {
+          try {
+            const sttResult = await api.speechToText(uri);
+            if (sttResult.success && sttResult.data?.text) {
+              onTranscription(sttResult.data.text);
+            }
+          } catch (err) {
+            console.warn("STT transcription failed:", err);
+          }
+        }
       }
 
       if (Platform.OS !== "web") {
@@ -95,7 +81,72 @@ export default function VoiceRecorder({
     } catch (err) {
       console.error("Failed to stop recording:", err);
     }
-  }, [onRecordingComplete]);
+  }, [onRecordingComplete, onTranscription]);
+
+  const startRecording = useCallback(async () => {
+    if (disabled) return;
+
+    try {
+      const permission = await Audio.requestPermissionsAsync();
+      if (!permission.granted) {
+        return;
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      const { recording } = await Audio.Recording.createAsync({
+        ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+        isMeteringEnabled: true,
+      });
+
+      recordingRef.current = recording;
+      setIsRecording(true);
+      setDuration(0);
+      silenceStartRef.current = null;
+
+      if (Platform.OS !== "web") {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+
+      // Monitor metering for silence detection
+      recording.setOnRecordingStatusUpdate((status) => {
+        if (!status.isRecording) return;
+
+        const metering = status.metering ?? -160;
+
+        if (metering < SILENCE_THRESHOLD_DB) {
+          if (silenceStartRef.current === null) {
+            silenceStartRef.current = Date.now();
+          } else if (Date.now() - silenceStartRef.current >= SILENCE_DURATION_MS) {
+            // Auto-stop after sustained silence
+            stopRecording();
+          }
+        } else {
+          silenceStartRef.current = null;
+        }
+      });
+
+      // Set metering update interval
+      recording.setProgressUpdateInterval(200);
+
+      timerRef.current = setInterval(() => {
+        setDuration((d) => d + 1);
+      }, 1000);
+    } catch (err) {
+      console.error("Failed to start recording:", err);
+    }
+  }, [disabled, stopRecording]);
+
+  const toggleRecording = useCallback(() => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  }, [isRecording, startRecording, stopRecording]);
 
   const formatDuration = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -106,8 +157,7 @@ export default function VoiceRecorder({
   return (
     <View className="items-center justify-center">
       <Pressable
-        onPressIn={startRecording}
-        onPressOut={stopRecording}
+        onPress={toggleRecording}
         disabled={disabled}
         className={`w-12 h-12 rounded-full items-center justify-center ${
           disabled ? "opacity-40" : ""
@@ -136,7 +186,7 @@ export default function VoiceRecorder({
       )}
 
       <Text className="text-xs text-warmgray-400 mt-1">
-        {isRecording ? "Release to send" : "Hold to record"}
+        {isRecording ? "Tap to stop" : "Tap to record"}
       </Text>
     </View>
   );

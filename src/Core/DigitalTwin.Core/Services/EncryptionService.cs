@@ -2,6 +2,7 @@ using System;
 using System.Security.Cryptography;
 using System.Text;
 using DigitalTwin.Core.Interfaces;
+using DigitalTwin.Core.Telemetry;
 
 namespace DigitalTwin.Core.Services
 {
@@ -22,6 +23,7 @@ namespace DigitalTwin.Core.Services
 
         public (byte[] ciphertext, byte[] iv, byte[] tag) Encrypt(string plaintext)
         {
+            MetricsRegistry.EncryptionOperationsTotal.WithLabels("encrypt").Inc();
             var plaintextBytes = Encoding.UTF8.GetBytes(plaintext);
             var iv = new byte[12]; // 96-bit nonce for AES-GCM
             RandomNumberGenerator.Fill(iv);
@@ -37,6 +39,7 @@ namespace DigitalTwin.Core.Services
 
         public string Decrypt(byte[] ciphertext, byte[] iv, byte[] tag)
         {
+            MetricsRegistry.EncryptionOperationsTotal.WithLabels("decrypt").Inc();
             var plaintext = new byte[ciphertext.Length];
 
             using var aes = new AesGcm(_key, tag.Length);

@@ -48,6 +48,17 @@ namespace DigitalTwin.Core.Data
         // Subscription Entities
         public DbSet<Subscription> Subscriptions { get; set; }
 
+        // Biometric Entities
+        public DbSet<BiometricReading> BiometricReadings { get; set; }
+
+        // Coaching Entities
+        public DbSet<Goal> Goals { get; set; }
+        public DbSet<JournalEntry> JournalEntries { get; set; }
+        public DbSet<HabitRecord> HabitRecords { get; set; }
+
+        // Shared Experience Entities
+        public DbSet<SharedRoom> SharedRooms { get; set; }
+
         // Check-In Entities
         public DbSet<CheckInRecord> CheckInRecords { get; set; }
 
@@ -230,6 +241,69 @@ namespace DigitalTwin.Core.Data
                 entity.Property(e => e.Response).HasMaxLength(2000);
                 entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
                 entity.HasIndex(e => new { e.UserId, e.ScheduledAt });
+            });
+
+            // Configure BiometricReading
+            modelBuilder.Entity<BiometricReading>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.UserId).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.Type).IsRequired().HasMaxLength(30);
+                entity.Property(e => e.Unit).HasMaxLength(20);
+                entity.Property(e => e.Source).HasMaxLength(30);
+                entity.Property(e => e.Timestamp).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => new { e.UserId, e.Type, e.Timestamp });
+            });
+
+            // Configure Goal
+            modelBuilder.Entity<Goal>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.UserId).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.Description).HasMaxLength(2000);
+                entity.Property(e => e.Category).HasMaxLength(50);
+                entity.Property(e => e.Status).IsRequired().HasMaxLength(20);
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => new { e.UserId, e.Status });
+            });
+
+            // Configure JournalEntry
+            modelBuilder.Entity<JournalEntry>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.UserId).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.Content).IsRequired();
+                entity.Property(e => e.Mood).HasMaxLength(30);
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(e => e.Tags)
+                    .HasConversion(
+                        v => JsonSerializer.Serialize(v, (JsonSerializerOptions)null),
+                        v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions)null));
+                entity.HasIndex(e => new { e.UserId, e.CreatedAt });
+            });
+
+            // Configure HabitRecord
+            modelBuilder.Entity<HabitRecord>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.UserId).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.HabitName).IsRequired().HasMaxLength(100);
+                entity.HasIndex(e => new { e.UserId, e.HabitName, e.Date });
+            });
+
+            // Configure SharedRoom
+            modelBuilder.Entity<SharedRoom>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.CreatorUserId).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(e => e.Participants)
+                    .HasConversion(
+                        v => JsonSerializer.Serialize(v, (JsonSerializerOptions)null),
+                        v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions)null));
+                entity.HasIndex(e => e.IsActive);
             });
 
             // Add indexes for performance

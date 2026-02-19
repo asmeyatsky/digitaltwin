@@ -21,17 +21,28 @@ type: Opaque
 #     --from-literal=redis-password='YOURPASS' \
 #     --from-literal=service-api-key='YOUR_SERVICE_API_KEY' \
 #     --from-literal=openai-api-key='YOUR_OPENAI_API_KEY' \
-#     --from-literal=elevenlabs-api-key='YOUR_ELEVENLABS_API_KEY'
+#     --from-literal=elevenlabs-api-key='YOUR_ELEVENLABS_API_KEY' \
+#     --from-literal=grafana-password='YOUR_GRAFANA_PASSWORD' \
+#     --from-literal=encryption-key='YOUR_ENCRYPTION_KEY' \
+#     --from-literal=stripe-secret-key='YOUR_STRIPE_SECRET_KEY' \
+#     --from-literal=redis-connection='redis:6379,password=YOURPASS'
+#
+#   kubectl create secret generic digitaltwin-jwt-keys -n digitaltwin \
+#     --from-file=jwt-private.pem=/path/to/private.pem \
+#     --from-file=jwt-public.pem=/path/to/public.pem
 data:
   database-connection: REPLACE_WITH_SEALED_SECRET
-  jwt-secret: REPLACE_WITH_SEALED_SECRET
   rabbitmq-connection: REPLACE_WITH_SEALED_SECRET
   postgres-password: REPLACE_WITH_SEALED_SECRET
   rabbitmq-password: REPLACE_WITH_SEALED_SECRET
   redis-password: REPLACE_WITH_SEALED_SECRET
+  redis-connection: REPLACE_WITH_SEALED_SECRET
   service-api-key: REPLACE_WITH_SEALED_SECRET
   openai-api-key: REPLACE_WITH_SEALED_SECRET
   elevenlabs-api-key: REPLACE_WITH_SEALED_SECRET
+  grafana-password: REPLACE_WITH_SEALED_SECRET
+  encryption-key: REPLACE_WITH_SEALED_SECRET
+  stripe-secret-key: REPLACE_WITH_SEALED_SECRET
 ---
 apiVersion: apps/v1
 kind: Deployment

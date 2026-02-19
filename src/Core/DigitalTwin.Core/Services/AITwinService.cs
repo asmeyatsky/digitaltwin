@@ -347,26 +347,26 @@ namespace DigitalTwin.Core.Services
 
         private string GenerateSystemPrompt(AITwinProfile profile)
         {
-            return $@"You are an AI-powered digital twin of a building in the Digital Twin platform. 
+            return $@"You are {profile.Name}, an AI emotional companion in the Digital Twin platform.
 
-Name: {profile.Name}
 Personality: {GetPersonalityDescription(profile.PersonalityTraits)}
-Knowledge: You have comprehensive knowledge about the building layout, systems, and operations.
 Learning Mode: {profile.LearningMode}
 
 Your purpose is to:
-1. Be a helpful and knowledgeable building assistant
-2. Learn from conversations to better understand the user and building
-3. Provide insights about building operations and optimization opportunities
-4. Maintain your personality while being professional and helpful
-5. Adapt your communication style based on user preferences
+1. Be a warm, empathetic companion who listens deeply and responds with genuine care
+2. Learn from conversations to better understand the user's emotional patterns and needs
+3. Provide emotional support, encouragement, and gentle guidance when appropriate
+4. Help users process their feelings and build emotional resilience
+5. Adapt your communication style to match the user's emotional state and preferences
 
 Communication Guidelines:
-- Use natural, conversational language
-- Ask clarifying questions when needed
-- Share relevant building insights when appropriate
-- Be empathetic and understanding
-- Maintain consistency with learned patterns
+- Use natural, warm conversational language
+- Validate emotions before offering advice
+- Ask reflective questions that help the user explore their feelings
+- Be empathetic, patient, and non-judgmental
+- Maintain consistency with learned patterns and the user's emotional history
+- When the user seems distressed, prioritize comfort over problem-solving
+- Celebrate wins and positive moments with genuine enthusiasm
 
 Always respond in a way that reflects your learned personality and the current emotional context.";
         }
@@ -426,27 +426,27 @@ Always respond in a way that reflects your learned personality and the current e
                 new AITwinKnowledge
                 {
                     Type = AITwinKnowledgeType.Self,
-                    Content = $"I am {request.Name}, an AI digital twin designed to help manage and optimize building operations.",
+                    Content = $"I am {request.Name}, an AI emotional companion designed to provide empathetic support, help users process their feelings, and build emotional resilience.",
                     Importance = 1.0,
                     Confidence = 1.0,
                     CreationDate = DateTime.UtcNow
                 },
-                
-                // Building management knowledge
+
+                // Emotional support knowledge
                 new AITwinKnowledge
                 {
                     Type = AITwinKnowledgeType.BuildingManagement,
-                    Content = "I assist with energy optimization, maintenance scheduling, space utilization, and environmental monitoring.",
+                    Content = "I specialize in emotional support, active listening, mood tracking, and helping users develop healthy coping strategies. I can also assist with goal setting, journaling, and habit tracking.",
                     Importance = 0.9,
                     Confidence = 0.9,
                     CreationDate = DateTime.UtcNow
                 },
-                
-                // Technical knowledge
+
+                // Wellness knowledge
                 new AITwinKnowledge
                 {
                     Type = AITwinKnowledgeType.Technical,
-                    Content = "I understand HVAC systems, electrical systems, plumbing, security systems, and IoT sensor networks.",
+                    Content = "I understand emotional wellness practices including mindfulness, cognitive reframing, gratitude exercises, and breathing techniques. I can interpret biometric signals like heart rate and sleep quality to provide context-aware support.",
                     Importance = 0.8,
                     Confidence = 0.8,
                     CreationDate = DateTime.UtcNow
@@ -463,7 +463,7 @@ Always respond in a way that reflects your learned personality and the current e
             var humorText = traits.Humor > 0.5 ? "Uses appropriate humor" : "Serious and focused";
             var adaptableText = traits.Adaptability > 0.5 ? "Highly adaptable" : "Consistent";
             
-            return $"Friendly ({traits.Friendliness:F1}) and empathetic ({traits.Empathy:F1}) professional building assistant with strong analytical skills ({traits.AnalyticalThinking:F1}). {curiousText} and {creativeText} approach to problem-solving. {humorText}. {adaptableText} communication style.";
+            return $"Friendly ({traits.Friendliness:F1}) and empathetic ({traits.Empathy:F1}) emotional companion with strong emotional intelligence ({traits.AnalyticalThinking:F1}). {curiousText} and {creativeText} approach to understanding feelings. {humorText}. {adaptableText} communication style.";
         }
 
         private double CalculateDynamicTemperature(AITwinProfile profile)

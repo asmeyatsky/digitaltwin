@@ -34,17 +34,14 @@ spec:
             secretKeyRef:
               name: digitaltwin-secrets
               key: database-connection
-        - name: JwtConfiguration__SecretKey
-          valueFrom:
-            secretKeyRef:
-              name: digitaltwin-secrets
-              key: jwt-secret
+        - name: JwtConfiguration__PrivateKeyPath
+          value: "/app/keys/jwt-private.pem"
+        - name: JwtConfiguration__PublicKeyPath
+          value: "/app/keys/jwt-public.pem"
         - name: JwtConfiguration__Issuer
           value: "DigitalTwin"
         - name: JwtConfiguration__Audience
           value: "DigitalTwin"
-        - name: JwtConfiguration__ExpiryInMinutes
-          value: "60"
         - name: Redis__ConnectionString
           value: "redis:6379"
         - name: RabbitMQ__ConnectionString
@@ -87,12 +84,18 @@ spec:
         - name: config-volume
           mountPath: /app/config
           readOnly: true
+        - name: jwt-keys
+          mountPath: /app/keys
+          readOnly: true
         - name: logs-volume
           mountPath: /app/logs
       volumes:
       - name: config-volume
         configMap:
           name: digitaltwin-config
+      - name: jwt-keys
+        secret:
+          secretName: digitaltwin-jwt-keys
       - name: logs-volume
         persistentVolumeClaim:
           claimName: digitaltwin-logs-pvc
@@ -203,6 +206,10 @@ metadata:
     cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
 spec:
   tls:
   - hosts:
@@ -212,6 +219,13 @@ spec:
   - host: api.digitaltwin.com
     http:
       paths:
+      - path: /hubs
+        pathType: Prefix
+        backend:
+          service:
+            name: digitaltwin-api-service
+            port:
+              number: 80
       - path: /api
         pathType: Prefix
         backend:

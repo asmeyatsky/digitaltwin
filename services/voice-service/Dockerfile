@@ -1,12 +1,23 @@
 # Voice Service with ElevenLabs Integration
-FROM python:3.11-slim
+# Multi-stage build for optimized image size
+
+FROM python:3.11-slim AS builder
 
 RUN pip install --no-cache-dir --upgrade pip
 
-WORKDIR /app
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+
+FROM python:3.11-slim
+
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+WORKDIR /app
 
 RUN mkdir -p /app/voices
 

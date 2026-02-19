@@ -427,6 +427,21 @@ export async function cloneVoice(
   return requestMultipart<VoiceCloneStatus>("/api/voice/clone", formData);
 }
 
+export async function speechToText(
+  audioUri: string
+): Promise<ApiResponse<{ text: string; language: string }>> {
+  const formData = new FormData();
+  formData.append("file", {
+    uri: audioUri,
+    type: "audio/wav",
+    name: "recording.wav",
+  } as any);
+  return requestMultipart<{ text: string; language: string }>(
+    "/api/voice/stt",
+    formData
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Avatar API
 // ---------------------------------------------------------------------------

@@ -3,13 +3,17 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
+using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading.Tasks;
 using DigitalTwin.Core.DTOs;
 using DigitalTwin.Core.Entities;
 using DigitalTwin.Core.Enums;
+using DigitalTwin.Core.Events;
 using DigitalTwin.Core.Interfaces;
 using DigitalTwin.Core.Plugins;
+using DigitalTwin.Core.Telemetry;
 
 namespace DigitalTwin.Core.Services
 {
@@ -23,6 +27,8 @@ namespace DigitalTwin.Core.Services
         private readonly IEmotionFusionService? _emotionFusionService;
         private readonly IPluginManager? _pluginManager;
         private readonly IProactiveCheckInService? _checkInService;
+        private readonly IEventBus? _eventBus;
+        private readonly IHttpClientFactory? _httpClientFactory;
 
         private static readonly DistributedCacheEntryOptions SessionCacheOptions = new()
         {
@@ -37,7 +43,9 @@ namespace DigitalTwin.Core.Services
             IEncryptionService? encryptionService = null,
             IEmotionFusionService? emotionFusionService = null,
             IPluginManager? pluginManager = null,
-            IProactiveCheckInService? checkInService = null)
+            IProactiveCheckInService? checkInService = null,
+            IEventBus? eventBus = null,
+            IHttpClientFactory? httpClientFactory = null)
         {
             _emotionalStateService = emotionalStateService;
             _aiTwinService = aiTwinService;
@@ -47,6 +55,8 @@ namespace DigitalTwin.Core.Services
             _emotionFusionService = emotionFusionService;
             _pluginManager = pluginManager;
             _checkInService = checkInService;
+            _eventBus = eventBus;
+            _httpClientFactory = httpClientFactory;
         }
 
         private string SessionCacheKey(Guid userId) => $"conv:session:{userId}";
@@ -56,6 +66,8 @@ namespace DigitalTwin.Core.Services
             try
             {
                 _logger.LogInformation("Starting conversation for user {UserId}", userId);
+                MetricsRegistry.ConversationsTotal.Inc();
+                MetricsRegistry.ActiveConversations.Inc();
 
                 var session = new ConversationSession
                 {
@@ -68,6 +80,9 @@ namespace DigitalTwin.Core.Services
                 };
 
                 await _cache.SetStringAsync(SessionCacheKey(userId), JsonSerializer.Serialize(session), SessionCacheOptions);
+
+                if (_eventBus != null)
+                    await _eventBus.PublishAsync("conversation.started", new ConversationStarted(userId.ToString(), session.Id, DateTime.UtcNow));
 
                 var userMemories = await _emotionalStateService.GetUserMemoriesAsync(userId, 20);
                 var emotionalTrend = await _emotionalStateService.AnalyzeEmotionalTrendsAsync(userId, TimeSpan.FromDays(7));
@@ -120,6 +135,11 @@ namespace DigitalTwin.Core.Services
         {
             try
             {
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                using var activity = DiagnosticConfig.Source.StartActivity("ProcessMessage");
+                activity?.SetTag("userId", userId.ToString());
+                activity?.SetTag("messageLength", message.Length);
+
                 _logger.LogInformation("Processing message for user {UserId}", userId);
 
                 var sessionJson = await _cache.GetStringAsync(SessionCacheKey(userId));
@@ -139,7 +159,7 @@ namespace DigitalTwin.Core.Services
                 var relevantMemories = await _emotionalStateService.GetRelevantMemoriesAsync(userId, message, 10);
 
                 // Analyze text emotion (keyword-based)
-                var textEmotion = AnalyzeMessageEmotion(message);
+                var textEmotion = await AnalyzeMessageEmotionAsync(message);
 
                 // Multi-modal emotion fusion using unified Emotion enum (AD-1)
                 var unifiedEmotion = EmotionMapper.FromEmotionType(textEmotion);
@@ -292,7 +312,16 @@ namespace DigitalTwin.Core.Services
                     SessionId = session.Id
                 };
 
+                activity?.SetTag("emotion", textEmotion.ToString());
+
                 _logger.LogInformation("Message processed successfully for user {UserId}", userId);
+
+                if (_eventBus != null)
+                    await _eventBus.PublishAsync("message.processed", new MessageProcessed(userId.ToString(), fusedEmotionLabel, fusedConfidence, DateTime.UtcNow));
+
+                stopwatch.Stop();
+                MetricsRegistry.MessageLatencySeconds.Observe(stopwatch.Elapsed.TotalSeconds);
+
                 return response;
             }
             catch (Exception ex)
@@ -318,6 +347,7 @@ namespace DigitalTwin.Core.Services
                 {
                     var session = JsonSerializer.Deserialize<ConversationSession>(cachedJson);
                     session.IsActive = false;
+                    MetricsRegistry.ActiveConversations.Dec();
                     session.EndedAt = DateTime.UtcNow;
 
                     var summaryMemory = new EmotionalMemory
@@ -430,6 +460,53 @@ namespace DigitalTwin.Core.Services
                     ResponseTime = DateTime.UtcNow
                 };
             }
+        }
+
+        private async Task<EmotionType> AnalyzeMessageEmotionAsync(string message)
+        {
+            if (_httpClientFactory != null)
+            {
+                try
+                {
+                    var client = _httpClientFactory.CreateClient("LLM");
+                    var serviceKey = Environment.GetEnvironmentVariable("Services__ServiceKey") ?? "dev-service-key";
+                    client.DefaultRequestHeaders.Add("X-Service-Key", serviceKey);
+
+                    var response = await client.PostAsJsonAsync("/analyze-emotion-text", new { text = message });
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var result = await response.Content.ReadFromJsonAsync<NlpEmotionResult>();
+                        if (result != null)
+                        {
+                            return MapNlpEmotion(result.Emotion);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "NLP emotion analysis failed, falling back to keywords");
+                }
+            }
+
+            return AnalyzeMessageEmotion(message);
+        }
+
+        private static EmotionType MapNlpEmotion(string emotion) => emotion.ToLower() switch
+        {
+            "happy" => EmotionType.Happy,
+            "sad" => EmotionType.Sad,
+            "angry" => EmotionType.Angry,
+            "anxious" => EmotionType.Fear,
+            "surprised" => EmotionType.Surprise,
+            "excited" => EmotionType.Happy,
+            "calm" => EmotionType.Neutral,
+            _ => EmotionType.Neutral
+        };
+
+        private class NlpEmotionResult
+        {
+            public string Emotion { get; set; } = "neutral";
+            public double Confidence { get; set; }
         }
 
         private EmotionType AnalyzeMessageEmotion(string message)

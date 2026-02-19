@@ -131,6 +131,40 @@ namespace DigitalTwin.API.Controllers
             }
         }
 
+        [HttpPost("stt")]
+        public async Task<IActionResult> SpeechToText()
+        {
+            try
+            {
+                var file = Request.Form.Files.FirstOrDefault();
+                if (file == null)
+                    return BadRequest(ApiResponse.Fail("No audio file provided"));
+
+                var client = _httpClientFactory.CreateClient("Voice");
+                client.DefaultRequestHeaders.Add("X-Service-Key", _serviceKey);
+
+                using var content = new MultipartFormDataContent();
+                var stream = file.OpenReadStream();
+                var streamContent = new StreamContent(stream);
+                streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType ?? "audio/wav");
+                content.Add(streamContent, "file", file.FileName ?? "audio.wav");
+
+                var response = await client.PostAsync("/voice/stt", content);
+                var responseContent = await response.Content.ReadAsStringAsync();
+
+                if (!response.IsSuccessStatusCode)
+                    return StatusCode((int)response.StatusCode, ApiResponse.Fail("Speech-to-text failed"));
+
+                var sttData = System.Text.Json.JsonSerializer.Deserialize<object>(responseContent);
+                return Ok(ApiResponse<object>.Ok(sttData));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error proxying STT request");
+                return StatusCode(500, ApiResponse.Fail("Failed to transcribe audio"));
+            }
+        }
+
         [HttpPost("clone")]
         public async Task<IActionResult> CloneVoice()
         {

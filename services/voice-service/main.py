@@ -12,6 +12,7 @@ from typing import Optional
 from contextlib import asynccontextmanager
 
 import httpx
+import openai as openai_module
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -692,17 +693,105 @@ PHONEME_VISEME_MAP = {
 
 # Viseme shapes for Unity blend shapes
 VISEME_SHAPES = {
-    'rest': {'jawOpen': 0.0, 'mouthSmile': 0.0, 'mouthPucker': 0.0},
-    'bilabial': {'jawOpen': 0.1, 'mouthSmile': 0.0, 'mouthPucker': 0.3},
-    'labiodental': {'jawOpen': 0.1, 'mouthSmile': 0.0, 'mouthPucker': 0.1},
-    'dental': {'jawOpen': 0.2, 'mouthSmile': 0.2, 'mouthPucker': 0.0},
-    'alveolar': {'jawOpen': 0.2, 'mouthSmile': 0.1, 'mouthPucker': 0.0},
-    'postalveolar': {'jawOpen': 0.2, 'mouthSmile': 0.0, 'mouthPucker': 0.2},
-    'velar': {'jawOpen': 0.3, 'mouthSmile': 0.0, 'mouthPucker': 0.0},
-    'open': {'jawOpen': 0.6, 'mouthSmile': 0.1, 'mouthPucker': 0.0},
-    'mid': {'jawOpen': 0.4, 'mouthSmile': 0.2, 'mouthPucker': 0.0},
-    'narrow': {'jawOpen': 0.2, 'mouthSmile': 0.3, 'mouthPucker': 0.0},
-    'rounded': {'jawOpen': 0.3, 'mouthSmile': 0.0, 'mouthPucker': 0.4}
+    'rest': {
+        'jawOpen': 0.0, 'jawForward': 0.0, 'mouthClose': 0.0,
+        'mouthFunnel': 0.0, 'mouthPucker': 0.0,
+        'mouthLeft': 0.0, 'mouthRight': 0.0,
+        'mouthSmileLeft': 0.0, 'mouthSmileRight': 0.0,
+        'mouthFrownLeft': 0.0, 'mouthFrownRight': 0.0,
+        'mouthStretchLeft': 0.0, 'mouthStretchRight': 0.0,
+        'tongueOut': 0.0, 'cheekPuff': 0.0,
+    },
+    'bilabial': {
+        'jawOpen': 0.1, 'jawForward': 0.0, 'mouthClose': 0.6,
+        'mouthFunnel': 0.0, 'mouthPucker': 0.3,
+        'mouthLeft': 0.0, 'mouthRight': 0.0,
+        'mouthSmileLeft': 0.0, 'mouthSmileRight': 0.0,
+        'mouthFrownLeft': 0.0, 'mouthFrownRight': 0.0,
+        'mouthStretchLeft': 0.0, 'mouthStretchRight': 0.0,
+        'tongueOut': 0.0, 'cheekPuff': 0.0,
+    },
+    'labiodental': {
+        'jawOpen': 0.1, 'jawForward': 0.0, 'mouthClose': 0.2,
+        'mouthFunnel': 0.1, 'mouthPucker': 0.1,
+        'mouthLeft': 0.0, 'mouthRight': 0.0,
+        'mouthSmileLeft': 0.0, 'mouthSmileRight': 0.0,
+        'mouthFrownLeft': 0.1, 'mouthFrownRight': 0.1,
+        'mouthStretchLeft': 0.0, 'mouthStretchRight': 0.0,
+        'tongueOut': 0.0, 'cheekPuff': 0.0,
+    },
+    'dental': {
+        'jawOpen': 0.2, 'jawForward': 0.1, 'mouthClose': 0.0,
+        'mouthFunnel': 0.0, 'mouthPucker': 0.0,
+        'mouthLeft': 0.0, 'mouthRight': 0.0,
+        'mouthSmileLeft': 0.2, 'mouthSmileRight': 0.2,
+        'mouthFrownLeft': 0.0, 'mouthFrownRight': 0.0,
+        'mouthStretchLeft': 0.1, 'mouthStretchRight': 0.1,
+        'tongueOut': 0.3, 'cheekPuff': 0.0,
+    },
+    'alveolar': {
+        'jawOpen': 0.2, 'jawForward': 0.0, 'mouthClose': 0.0,
+        'mouthFunnel': 0.0, 'mouthPucker': 0.0,
+        'mouthLeft': 0.0, 'mouthRight': 0.0,
+        'mouthSmileLeft': 0.1, 'mouthSmileRight': 0.1,
+        'mouthFrownLeft': 0.0, 'mouthFrownRight': 0.0,
+        'mouthStretchLeft': 0.1, 'mouthStretchRight': 0.1,
+        'tongueOut': 0.1, 'cheekPuff': 0.0,
+    },
+    'postalveolar': {
+        'jawOpen': 0.2, 'jawForward': 0.1, 'mouthClose': 0.0,
+        'mouthFunnel': 0.3, 'mouthPucker': 0.2,
+        'mouthLeft': 0.0, 'mouthRight': 0.0,
+        'mouthSmileLeft': 0.0, 'mouthSmileRight': 0.0,
+        'mouthFrownLeft': 0.0, 'mouthFrownRight': 0.0,
+        'mouthStretchLeft': 0.0, 'mouthStretchRight': 0.0,
+        'tongueOut': 0.0, 'cheekPuff': 0.1,
+    },
+    'velar': {
+        'jawOpen': 0.3, 'jawForward': 0.0, 'mouthClose': 0.0,
+        'mouthFunnel': 0.0, 'mouthPucker': 0.0,
+        'mouthLeft': 0.0, 'mouthRight': 0.0,
+        'mouthSmileLeft': 0.0, 'mouthSmileRight': 0.0,
+        'mouthFrownLeft': 0.0, 'mouthFrownRight': 0.0,
+        'mouthStretchLeft': 0.2, 'mouthStretchRight': 0.2,
+        'tongueOut': 0.0, 'cheekPuff': 0.1,
+    },
+    'open': {
+        'jawOpen': 0.7, 'jawForward': 0.0, 'mouthClose': 0.0,
+        'mouthFunnel': 0.0, 'mouthPucker': 0.0,
+        'mouthLeft': 0.0, 'mouthRight': 0.0,
+        'mouthSmileLeft': 0.1, 'mouthSmileRight': 0.1,
+        'mouthFrownLeft': 0.0, 'mouthFrownRight': 0.0,
+        'mouthStretchLeft': 0.2, 'mouthStretchRight': 0.2,
+        'tongueOut': 0.0, 'cheekPuff': 0.0,
+    },
+    'mid': {
+        'jawOpen': 0.4, 'jawForward': 0.0, 'mouthClose': 0.0,
+        'mouthFunnel': 0.1, 'mouthPucker': 0.0,
+        'mouthLeft': 0.0, 'mouthRight': 0.0,
+        'mouthSmileLeft': 0.2, 'mouthSmileRight': 0.2,
+        'mouthFrownLeft': 0.0, 'mouthFrownRight': 0.0,
+        'mouthStretchLeft': 0.1, 'mouthStretchRight': 0.1,
+        'tongueOut': 0.0, 'cheekPuff': 0.0,
+    },
+    'narrow': {
+        'jawOpen': 0.2, 'jawForward': 0.0, 'mouthClose': 0.0,
+        'mouthFunnel': 0.0, 'mouthPucker': 0.0,
+        'mouthLeft': 0.0, 'mouthRight': 0.0,
+        'mouthSmileLeft': 0.3, 'mouthSmileRight': 0.3,
+        'mouthFrownLeft': 0.0, 'mouthFrownRight': 0.0,
+        'mouthStretchLeft': 0.2, 'mouthStretchRight': 0.2,
+        'tongueOut': 0.0, 'cheekPuff': 0.0,
+    },
+    'rounded': {
+        'jawOpen': 0.3, 'jawForward': 0.1, 'mouthClose': 0.0,
+        'mouthFunnel': 0.4, 'mouthPucker': 0.5,
+        'mouthLeft': 0.0, 'mouthRight': 0.0,
+        'mouthSmileLeft': 0.0, 'mouthSmileRight': 0.0,
+        'mouthFrownLeft': 0.0, 'mouthFrownRight': 0.0,
+        'mouthStretchLeft': 0.0, 'mouthStretchRight': 0.0,
+        'tongueOut': 0.0, 'cheekPuff': 0.2,
+    },
 }
 
 
@@ -786,6 +875,50 @@ def estimate_speech_duration(text: str) -> int:
     # Average speaking rate: ~150 words per minute, ~5 chars per word
     # = ~750 chars per minute = ~80ms per char
     return len(text) * 80
+
+
+@app.post("/voice/stt")
+@limiter.limit("30/minute")
+async def speech_to_text(request: Request, file: UploadFile = File(...)):
+    """
+    Transcribe audio to text using OpenAI Whisper API.
+    Accepts audio file, returns transcribed text and detected language.
+    """
+    try:
+        content = await validate_audio_upload(file)
+
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            raise HTTPException(status_code=503, detail="OpenAI API key not configured for STT")
+
+        client = openai_module.OpenAI(api_key=openai_api_key)
+
+        # Write to temp file for Whisper API
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+
+        try:
+            with open(tmp_path, "rb") as audio_file:
+                transcript = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    response_format="verbose_json"
+                )
+
+            return {
+                "text": transcript.text,
+                "language": getattr(transcript, "language", "en")
+            }
+        finally:
+            os.unlink(tmp_path)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"STT error: {e}")
+        raise HTTPException(status_code=500, detail="Speech-to-text transcription failed")
 
 
 if __name__ == "__main__":

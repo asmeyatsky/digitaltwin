@@ -419,6 +419,18 @@ async def analyze_message(request: Request, body: dict):
         return {"error": "Internal server error"}
 
 
+class EmotionAnalysisRequest(BaseModel):
+    """Request for text emotion analysis"""
+    text: str
+
+
+class EmotionAnalysisResponse(BaseModel):
+    """Response for text emotion analysis"""
+    emotion: str
+    confidence: float
+    all_emotions: Dict[str, float] = {}
+
+
 class EmbeddingRequest(BaseModel):
     """Request model for embedding generation"""
     text: str
@@ -467,6 +479,96 @@ async def health_check():
         model=DEFAULT_MODEL,
         api_available=bool(os.getenv("OPENAI_API_KEY")),
     )
+
+
+# AD-1 compliant emotion list
+AD1_EMOTIONS = ["happy", "sad", "angry", "anxious", "calm", "surprised", "excited", "neutral"]
+
+
+def _keyword_emotion_fallback(text: str) -> tuple[str, float]:
+    """Keyword-based emotion fallback when API is unavailable."""
+    text_lower = text.lower()
+
+    keyword_map = {
+        "happy": ["happy", "joy", "wonderful", "great", "amazing", "love", "fantastic", "glad"],
+        "sad": ["sad", "depressed", "down", "unhappy", "terrible", "disappointed", "lonely", "cry"],
+        "angry": ["angry", "mad", "furious", "annoyed", "frustrated", "irritated", "upset", "rage"],
+        "anxious": ["anxious", "worried", "nervous", "scared", "afraid", "fearful", "panic", "terrified"],
+        "calm": ["calm", "peaceful", "relaxed", "serene", "tranquil", "content", "zen"],
+        "surprised": ["surprised", "shocked", "amazed", "astonished", "wow", "incredible", "unbelievable"],
+        "excited": ["excited", "thrilled", "pumped", "eager", "enthusiastic", "hyped", "stoked"],
+    }
+
+    for emotion, keywords in keyword_map.items():
+        matches = sum(1 for kw in keywords if kw in text_lower)
+        if matches > 0:
+            confidence = min(0.4 + matches * 0.15, 0.85)
+            return emotion, confidence
+
+    return "neutral", 0.5
+
+
+@app.post("/analyze-emotion-text", response_model=EmotionAnalysisResponse)
+@limiter.limit("60/minute")
+async def analyze_emotion_text(request: Request, body: EmotionAnalysisRequest):
+    """
+    Analyze text to detect the primary emotion using GPT-3.5-turbo.
+    Falls back to keyword-based detection when API is unavailable.
+    Returns AD-1 compliant emotion classification.
+    """
+    try:
+        if os.getenv("OPENAI_API_KEY"):
+            try:
+                client = openai.AsyncOpenAI()
+                response = await client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are an emotion classifier. Classify the user's text into exactly one of these emotions: "
+                                "happy, sad, angry, anxious, calm, surprised, excited, neutral. "
+                                "Also provide a confidence score between 0 and 1. "
+                                "Respond ONLY with JSON: {\"emotion\": \"...\", \"confidence\": 0.X}"
+                            ),
+                        },
+                        {"role": "user", "content": body.text},
+                    ],
+                    max_tokens=50,
+                    temperature=0.1,
+                )
+
+                result_text = response.choices[0].message.content.strip()
+                result = json.loads(result_text)
+
+                emotion = result.get("emotion", "neutral").lower()
+                if emotion not in AD1_EMOTIONS:
+                    emotion = "neutral"
+
+                confidence = min(max(float(result.get("confidence", 0.7)), 0.0), 1.0)
+
+                return EmotionAnalysisResponse(
+                    emotion=emotion,
+                    confidence=round(confidence, 2),
+                )
+
+            except Exception as e:
+                logger.warning(f"GPT emotion analysis failed, using fallback: {e}")
+                emotion, confidence = _keyword_emotion_fallback(body.text)
+                return EmotionAnalysisResponse(
+                    emotion=emotion,
+                    confidence=round(confidence, 2),
+                )
+        else:
+            emotion, confidence = _keyword_emotion_fallback(body.text)
+            return EmotionAnalysisResponse(
+                emotion=emotion,
+                confidence=round(confidence, 2),
+            )
+
+    except Exception as e:
+        logger.error(f"Emotion analysis error: {e}")
+        raise HTTPException(status_code=500, detail="Emotion analysis failed")
 
 
 if __name__ == "__main__":

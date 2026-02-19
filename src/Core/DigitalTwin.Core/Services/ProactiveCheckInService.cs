@@ -8,7 +8,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using DigitalTwin.Core.Data;
 using DigitalTwin.Core.Entities;
+using DigitalTwin.Core.Events;
 using DigitalTwin.Core.Interfaces;
+using DigitalTwin.Core.Telemetry;
 
 namespace DigitalTwin.Core.Services
 {
@@ -18,23 +20,29 @@ namespace DigitalTwin.Core.Services
         private readonly IEmotionalStateService _emotionalStateService;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly ILogger<ProactiveCheckInService> _logger;
+        private readonly IEventBus? _eventBus;
 
         public ProactiveCheckInService(
             DigitalTwinDbContext context,
             IEmotionalStateService emotionalStateService,
             IHttpClientFactory httpClientFactory,
-            ILogger<ProactiveCheckInService> logger)
+            ILogger<ProactiveCheckInService> logger,
+            IEventBus? eventBus = null)
         {
             _context = context;
             _emotionalStateService = emotionalStateService;
             _httpClientFactory = httpClientFactory;
             _logger = logger;
+            _eventBus = eventBus;
         }
 
         public async Task<CheckInSuggestion?> EvaluateCheckInAsync(string userId)
         {
             try
             {
+                using var activity = DiagnosticConfig.Source.StartActivity("EvaluateCheckIn");
+                activity?.SetTag("userId", userId);
+
                 var userGuid = Guid.Parse(userId);
 
                 // Check if a check-in was already created recently (within 12 hours)
@@ -54,6 +62,11 @@ namespace DigitalTwin.Core.Services
                     var message = await GenerateCheckInMessageAsync("mood_triggered",
                         $"User has been experiencing {trend.DominantEmotion} frequently");
 
+                    if (_eventBus != null)
+                        await _eventBus.PublishAsync("checkin.triggered", new CheckInTriggered(userId, "mood_triggered", trend.DominantEmotion.ToString(), DateTime.UtcNow));
+
+                    MetricsRegistry.CheckInEvaluationsTotal.WithLabels("mood_triggered").Inc();
+                    activity?.SetTag("triggerType", "mood_triggered");
                     return new CheckInSuggestion
                     {
                         Type = "mood_triggered",
@@ -73,6 +86,11 @@ namespace DigitalTwin.Core.Services
                     var message = await GenerateCheckInMessageAsync("daily",
                         "User hasn't been active for over 48 hours");
 
+                    if (_eventBus != null)
+                        await _eventBus.PublishAsync("checkin.triggered", new CheckInTriggered(userId, "daily", "inactive", DateTime.UtcNow));
+
+                    MetricsRegistry.CheckInEvaluationsTotal.WithLabels("daily").Inc();
+                    activity?.SetTag("triggerType", "daily");
                     return new CheckInSuggestion
                     {
                         Type = "daily",

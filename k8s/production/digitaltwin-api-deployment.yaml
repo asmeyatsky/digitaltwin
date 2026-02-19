@@ -1,5 +1,5 @@
-# Digital Twin Deployment Infrastructure
-# Kubernetes manifests and Terraform configurations for scaling
+# Production API deployment — aligned with k8s/api-deployment.yaml
+# Uses pinned image tags and production-grade configuration
 
 apiVersion: v1
 kind: Namespace
@@ -15,25 +15,17 @@ metadata:
   name: digitaltwin-config
   namespace: digitaltwin
 data:
-  API_BASE_URL: "https://api.digitaltwin.com"
-  DATABASE_HOST: "prod-db.digitaltwin.com"
-  REDIS_HOST: "prod-redis.digitaltwin.com"
-  RABBITMQ_HOST: "prod-rabbitmq.digitaltwin.com"
-  LOG_LEVEL: "Warning"
-  DEPLOYMENT_ENVIRONMENT: "production"
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: digitaltwin-secrets
-  namespace: digitaltwin
-type: Opaque
-data:
-  # Base64 encoded values - use kubectl create secret with --from-literal
-  JWT_SECRET_KEY: <BASE64_ENCODED_JWT_SECRET>
-  DB_PASSWORD: <BASE64_ENCODED_DB_PASSWORD>
-  REDIS_PASSWORD: <BASE64_ENCODED_REDIS_PASSWORD>
-  ELEVENLABS_API_KEY: <BASE64_ENCODED_ELEVENLABS_KEY>
+  cors-origins: "https://app.digitaltwin.com,https://api.digitaltwin.com"
+  appsettings.json: |
+    {
+      "Logging": {
+        "LogLevel": {
+          "Default": "Warning",
+          "Microsoft.AspNetCore": "Warning"
+        }
+      },
+      "AllowedHosts": "*"
+    }
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -52,30 +44,75 @@ spec:
     metadata:
       labels:
         app: digitaltwin-api
+        version: v1
     spec:
       securityContext:
         runAsNonRoot: true
-        allowPrivilegeEscalation: false
       containers:
-      - name: api-gateway
+      - name: digitaltwin-api
         image: ghcr.io/asmeyatsky/digitaltwin/api-gateway:v1.0.0
         ports:
-        - containerPort: 8080
+        - containerPort: 80
+          name: http
+        - containerPort: 443
+          name: https
         env:
-        - name: API_BASE_URL
-          valueFrom:
-            configMapKeyRef:
-              name: digitaltwin-config
-              key: API_BASE_URL
-        - name: JwtConfiguration__SecretKey
+        - name: ASPNETCORE_ENVIRONMENT
+          value: "production"
+        - name: ConnectionStrings__DefaultConnection
           valueFrom:
             secretKeyRef:
               name: digitaltwin-secrets
-              key: JWT_SECRET_KEY
+              key: database-connection
+        - name: JwtConfiguration__PrivateKeyPath
+          value: "/app/keys/jwt-private.pem"
+        - name: JwtConfiguration__PublicKeyPath
+          value: "/app/keys/jwt-public.pem"
         - name: JwtConfiguration__Issuer
           value: "DigitalTwin"
         - name: JwtConfiguration__Audience
           value: "DigitalTwin"
+        - name: Redis__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: digitaltwin-secrets
+              key: redis-connection
+              optional: true
+        - name: RabbitMQ__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: digitaltwin-secrets
+              key: rabbitmq-connection
+        - name: Services__DeepFace__BaseUrl
+          value: "http://digitaltwin-deepface-service:8001"
+        - name: Services__LLM__BaseUrl
+          value: "http://digitaltwin-llm-service:8004"
+        - name: Services__Avatar__BaseUrl
+          value: "http://digitaltwin-avatar-service:8002"
+        - name: Services__Voice__BaseUrl
+          value: "http://digitaltwin-voice-service:8003"
+        - name: Services__ServiceKey
+          valueFrom:
+            secretKeyRef:
+              name: digitaltwin-secrets
+              key: service-api-key
+        - name: Encryption__Key
+          valueFrom:
+            secretKeyRef:
+              name: digitaltwin-secrets
+              key: encryption-key
+              optional: true
+        - name: Stripe__SecretKey
+          valueFrom:
+            secretKeyRef:
+              name: digitaltwin-secrets
+              key: stripe-secret-key
+              optional: true
+        - name: CORS__AllowedOrigins
+          valueFrom:
+            configMapKeyRef:
+              name: digitaltwin-config
+              key: cors-origins
         resources:
           requests:
             memory: "512Mi"
@@ -83,18 +120,78 @@ spec:
           limits:
             memory: "1Gi"
             cpu: "1000m"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
         livenessProbe:
           httpGet:
             path: /health
-            port: 8080
+            port: 80
           initialDelaySeconds: 30
           periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
         readinessProbe:
           httpGet:
-            path: /ready
-            port: 8080
+            path: /health
+            port: 80
           initialDelaySeconds: 5
           periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: config-volume
+          mountPath: /app/config
+          readOnly: true
+        - name: jwt-keys
+          mountPath: /app/keys
+          readOnly: true
+        - name: logs-volume
+          mountPath: /app/logs
+      volumes:
+      - name: config-volume
+        configMap:
+          name: digitaltwin-config
+      - name: jwt-keys
+        secret:
+          secretName: digitaltwin-jwt-keys
+      - name: logs-volume
+        persistentVolumeClaim:
+          claimName: digitaltwin-logs-pvc
+      imagePullSecrets:
+      - name: digitaltwin-registry-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: digitaltwin-api-service
+  namespace: digitaltwin
+  labels:
+    app: digitaltwin-api
+spec:
+  selector:
+    app: digitaltwin-api
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+  - name: https
+    port: 443
+    targetPort: 443
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: digitaltwin-logs-pvc
+  namespace: digitaltwin
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: fast-ssd
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
@@ -107,7 +204,7 @@ spec:
     kind: Deployment
     name: digitaltwin-api
   minReplicas: 3
-  maxReplicas: 50
+  maxReplicas: 20
   metrics:
   - type: Resource
     resource:
@@ -122,30 +219,22 @@ spec:
         type: Utilization
         averageUtilization: 80
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: digitaltwin-api-service
-  namespace: digitaltwin
-spec:
-  selector:
-    app: digitaltwin-api
-  ports:
-  - port: 80
-    targetPort: 8080
-    name: http
-  type: LoadBalancer
----
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: digitaltwin-api-ingress
+  name: digitaltwin-ingress
   namespace: digitaltwin
   annotations:
     kubernetes.io/ingress.class: nginx
-    nginx.ingress.kubernetes.io/rewrite-target: /
     cert-manager.io/cluster-issuer: letsencrypt-prod
-    nginx.ingress.kubernetes.io/permanent-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    # WebSocket support for SignalR
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
 spec:
   tls:
   - hosts:
@@ -155,6 +244,20 @@ spec:
   - host: api.digitaltwin.com
     http:
       paths:
+      - path: /hubs
+        pathType: Prefix
+        backend:
+          service:
+            name: digitaltwin-api-service
+            port:
+              number: 80
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: digitaltwin-api-service
+            port:
+              number: 80
       - path: /
         pathType: Prefix
         backend:

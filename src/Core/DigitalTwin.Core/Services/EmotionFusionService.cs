@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using DigitalTwin.Core.Enums;
 using DigitalTwin.Core.Interfaces;
+using DigitalTwin.Core.Telemetry;
 
 namespace DigitalTwin.Core.Services
 {
@@ -52,6 +53,11 @@ namespace DigitalTwin.Core.Services
                     Signals = Array.Empty<EmotionSignal>()
                 });
             }
+
+            MetricsRegistry.FusionOperationsTotal.Inc();
+
+            using var activity = DiagnosticConfig.Source.StartActivity("FuseEmotions");
+            activity?.SetTag("signalCount", signals.Length);
 
             var now = DateTime.UtcNow;
 
@@ -122,6 +128,8 @@ namespace DigitalTwin.Core.Services
 
             _logger.LogInformation("Fused {Count} signals → {Primary} ({Confidence:F2}), valence={Valence}, arousal={Arousal}",
                 signals.Length, result.PrimaryEmotion, result.Confidence, result.Valence, result.Arousal);
+
+            activity?.SetTag("primaryEmotion", result.PrimaryEmotion.ToString());
 
             return Task.FromResult(result);
         }

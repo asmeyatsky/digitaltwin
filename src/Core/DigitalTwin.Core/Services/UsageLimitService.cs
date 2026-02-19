@@ -6,7 +6,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
 using DigitalTwin.Core.Data;
+using DigitalTwin.Core.Events;
 using DigitalTwin.Core.Interfaces;
+using DigitalTwin.Core.Telemetry;
 
 namespace DigitalTwin.Core.Services
 {
@@ -15,6 +17,7 @@ namespace DigitalTwin.Core.Services
         private readonly DigitalTwinDbContext _context;
         private readonly IDistributedCache _cache;
         private readonly ILogger<UsageLimitService> _logger;
+        private readonly IEventBus? _eventBus;
 
         // Tier limits: resource -> daily limit per tier
         private static readonly Dictionary<string, Dictionary<string, int>> TierLimits = new()
@@ -48,15 +51,20 @@ namespace DigitalTwin.Core.Services
         public UsageLimitService(
             DigitalTwinDbContext context,
             IDistributedCache cache,
-            ILogger<UsageLimitService> logger)
+            ILogger<UsageLimitService> logger,
+            IEventBus? eventBus = null)
         {
             _context = context;
             _cache = cache;
             _logger = logger;
+            _eventBus = eventBus;
         }
 
         public async Task<(bool allowed, int remaining, int limit)> CheckLimitAsync(string userId, string resource)
         {
+            using var activity = DiagnosticConfig.Source.StartActivity("CheckUsageLimit");
+            activity?.SetTag("resource", resource);
+
             var tier = await GetUserTierAsync(userId);
             var limit = GetLimit(tier, resource);
 
@@ -68,6 +76,14 @@ namespace DigitalTwin.Core.Services
 
             var used = await GetCurrentUsageAsync(userId, resource);
             var remaining = Math.Max(0, limit - used);
+
+            if (remaining <= 0)
+                MetricsRegistry.UsageLimitHitsTotal.WithLabels(resource).Inc();
+
+            if (remaining <= 0 && _eventBus != null)
+                await _eventBus.PublishAsync("usage.limit.exceeded", new UsageLimitExceeded(userId, resource, limit, DateTime.UtcNow));
+
+            activity?.SetTag("allowed", remaining > 0);
 
             return (remaining > 0, remaining, limit);
         }

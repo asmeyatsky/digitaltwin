@@ -1,78 +1,38 @@
-using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using System.Text;
 using Microsoft.Extensions.Logging;
-using Microsoft.AspNetCore.Cryptography.KeyDerivation;
 using System.Security.Cryptography;
 
 namespace DigitalTwin.API.Services
 {
-    /// <summary>
-    /// JWT Authentication Service
-    /// 
-    /// Architectural Intent:
-    /// - Generates JWT tokens for authenticated users
-    /// - Validates tokens for API requests
-    /// - Manages token refresh mechanism
-    /// - Supports secure authentication flows
-    /// 
-    /// Key Features:
-    /// 1. Token generation with claims
-    /// 2. Token validation and verification
-    /// 3. Refresh token support
-    /// 4. Secure key management
-    /// 5. Token expiration handling
-    /// </summary>
     public class JwtAuthenticationService
     {
-        private readonly IConfiguration _configuration;
+        private readonly JwtSigningCredentials _jwtConfig;
         private readonly ILogger<JwtAuthenticationService> _logger;
-        private readonly string _secretKey;
-        private readonly string _issuer;
-        private readonly string _audience;
 
         public JwtAuthenticationService(
-            IConfiguration configuration,
+            JwtSigningCredentials jwtConfig,
             ILogger<JwtAuthenticationService> logger)
         {
-            _configuration = configuration;
+            _jwtConfig = jwtConfig;
             _logger = logger;
-            
-            _secretKey = Environment.GetEnvironmentVariable("JWT_KEY") 
-                ?? configuration["Jwt:Key"] 
-                ?? "ThisIsASecretKeyForDevelopmentUseOnly123456789012345678901234567890";
-            
-            _issuer = Environment.GetEnvironmentVariable("JWT_ISSUER") 
-                ?? configuration["Jwt:Issuer"] 
-                ?? "DigitalTwinAPI";
-            
-            _audience = Environment.GetEnvironmentVariable("JWT_AUDIENCE") 
-                ?? configuration["Jwt:Audience"] 
-                ?? "DigitalTwinClients";
         }
 
-        /// <summary>
-        /// Generate JWT token for authenticated user
-        /// </summary>
         public string GenerateToken(string userId, string username, IList<string> roles)
         {
             try
             {
                 var tokenHandler = new JwtSecurityTokenHandler();
-                var key = Encoding.ASCII.GetBytes(_secretKey);
 
                 var claims = new List<Claim>
                 {
                     new Claim(ClaimTypes.NameIdentifier, userId),
                     new Claim(ClaimTypes.Name, username),
-                    new Claim(ClaimTypes.Role, string.Join(",", roles)),
                     new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                     new Claim(JwtRegisteredClaimNames.Iat, DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64)
                 };
 
-                // Add role claims individually
                 foreach (var role in roles)
                 {
                     claims.Add(new Claim(ClaimTypes.Role, role));
@@ -83,9 +43,9 @@ namespace DigitalTwin.API.Services
                     Subject = new ClaimsIdentity(claims),
                     Expires = DateTime.UtcNow.AddHours(
                         double.Parse(Environment.GetEnvironmentVariable("JWT_EXPIRY_HOURS") ?? "24")),
-                    Issuer = _issuer,
-                    Audience = _audience,
-                    SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
+                    Issuer = _jwtConfig.Issuer,
+                    Audience = _jwtConfig.Audience,
+                    SigningCredentials = _jwtConfig.Credentials
                 };
 
                 var token = tokenHandler.CreateToken(tokenDescriptor);
@@ -98,48 +58,33 @@ namespace DigitalTwin.API.Services
             }
         }
 
-        /// <summary>
-        /// Generate refresh token for user
-        /// </summary>
         public string GenerateRefreshToken()
         {
-            try
-            {
-                var randomNumber = new byte[32];
-                using var rng = RandomNumberGenerator.Create();
-                rng.GetBytes(randomNumber);
-                return Convert.ToBase64String(randomNumber);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error generating refresh token");
-                throw new ApplicationException("Failed to generate refresh token", ex);
-            }
+            var randomNumber = new byte[32];
+            using var rng = RandomNumberGenerator.Create();
+            rng.GetBytes(randomNumber);
+            return Convert.ToBase64String(randomNumber);
         }
 
-        /// <summary>
-        /// Validate JWT token and return claims principal
-        /// </summary>
         public ClaimsPrincipal? ValidateToken(string token)
         {
             try
             {
                 var tokenHandler = new JwtSecurityTokenHandler();
-                var key = Encoding.ASCII.GetBytes(_secretKey);
 
                 var validationParameters = new TokenValidationParameters
                 {
                     ValidateIssuerSigningKey = true,
-                    IssuerSigningKey = new SymmetricSecurityKey(key),
+                    IssuerSigningKey = _jwtConfig.Credentials.Key,
                     ValidateIssuer = true,
-                    ValidIssuer = _issuer,
+                    ValidIssuer = _jwtConfig.Issuer,
                     ValidateAudience = true,
-                    ValidAudience = _audience,
+                    ValidAudience = _jwtConfig.Audience,
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.Zero
                 };
 
-                var principal = tokenHandler.ValidateToken(token, validationParameters, out SecurityToken validatedToken);
+                var principal = tokenHandler.ValidateToken(token, validationParameters, out _);
                 return principal;
             }
             catch (SecurityTokenExpiredException)
@@ -152,41 +97,20 @@ namespace DigitalTwin.API.Services
                 _logger.LogWarning("Token validation failed: Invalid signature");
                 return null;
             }
-            catch (SecurityTokenInvalidIssuerException)
-            {
-                _logger.LogWarning("Token validation failed: Invalid issuer");
-                return null;
-            }
-            catch (SecurityTokenInvalidAudienceException)
-            {
-                _logger.LogWarning("Token validation failed: Invalid audience");
-                return null;
-            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Token validation failed: Unknown error");
+                _logger.LogError(ex, "Token validation failed");
                 return null;
             }
         }
 
-        /// <summary>
-        /// Extract user information from token
-        /// </summary>
         public UserInfo? ExtractUserInfoFromToken(string token)
         {
             try
             {
                 var principal = ValidateToken(token);
-                if (principal == null)
-                {
+                if (principal?.Identity is not ClaimsIdentity identity)
                     return null;
-                }
-
-                var identity = principal.Identity as ClaimsIdentity;
-                if (identity == null)
-                {
-                    return null;
-                }
 
                 return new UserInfo
                 {
@@ -203,32 +127,22 @@ namespace DigitalTwin.API.Services
             }
         }
 
-        /// <summary>
-        /// Check if token is expired
-        /// </summary>
         public bool IsTokenExpired(string token)
         {
             try
             {
                 var userInfo = ExtractUserInfoFromToken(token);
-                if (userInfo?.Expiration == null)
-                {
-                    return true; // Can't validate expiration, assume expired
-                }
-
+                if (userInfo?.Expiration == null) return true;
                 var expirationTime = DateTimeOffset.FromUnixTimeSeconds(long.Parse(userInfo.Expiration));
                 return expirationTime < DateTimeOffset.UtcNow;
             }
             catch
             {
-                return true; // If we can't parse, assume expired
+                return true;
             }
         }
     }
 
-    /// <summary>
-    /// User information extracted from JWT token
-    /// </summary>
     public class UserInfo
     {
         public string? UserId { get; set; }
