@@ -299,11 +299,41 @@ spec:
         ports:
         - containerPort: 8004
         env:
+        - name: LLM_PROVIDER
+          valueFrom:
+            configMapKeyRef:
+              name: digitaltwin-config
+              key: llm-provider
+              optional: true
+        - name: LLM_MODEL
+          valueFrom:
+            configMapKeyRef:
+              name: digitaltwin-config
+              key: llm-model
+              optional: true
+        - name: EMBEDDING_PROVIDER
+          valueFrom:
+            configMapKeyRef:
+              name: digitaltwin-config
+              key: embedding-provider
+              optional: true
         - name: OPENAI_API_KEY
           valueFrom:
             secretKeyRef:
               name: digitaltwin-secrets
               key: openai-api-key
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: digitaltwin-secrets
+              key: anthropic-api-key
+              optional: true
+        - name: GOOGLE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: digitaltwin-secrets
+              key: google-api-key
+              optional: true
         - name: SERVICE_API_KEY
           valueFrom:
             secretKeyRef:

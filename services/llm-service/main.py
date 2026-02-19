@@ -1,6 +1,7 @@
 """
 LLM Service for Emotional Companion
 FastAPI service for generating empathetic, contextually appropriate responses
+Supports multiple LLM providers: OpenAI, Anthropic (Claude), Google (Gemini)
 """
 
 import logging
@@ -18,18 +19,14 @@ from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-import openai
 from datetime import datetime
+
+from providers import create_llm_provider, LLMProvider
+from embeddings import create_embedding_provider, EmbeddingProvider
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Model configuration
-DEFAULT_MODEL = "gpt-3.5-turbo"
-EMPATHY_MODEL = "gpt-3.5-turbo"  # Could use specialized model
-MAX_TOKENS = 150
-TEMPERATURE = 0.7  # Slightly creative for empathetic responses
 
 # Emotional response templates
 EMOTION_RESPONSE_TEMPLATES = {
@@ -102,22 +99,41 @@ EMOTION_RESPONSE_TEMPLATES = {
 
 SERVICE_API_KEY = os.getenv("SERVICE_API_KEY", "")
 
+# Module-level provider references (set during lifespan)
+llm_provider: LLMProvider | None = None
+embedding_provider: EmbeddingProvider | None = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler for startup/shutdown"""
+    global llm_provider, embedding_provider
+
     # Startup
     logger.info("Starting LLM service...")
 
     if not SERVICE_API_KEY:
         logger.warning("SERVICE_API_KEY is not set — all non-health endpoints will return 503")
 
-    # Initialize OpenAI client
-    openai.api_key = os.getenv("OPENAI_API_KEY")
-    if not openai.api_key:
-        logger.warning("OPENAI_API_KEY not found, using mock responses")
+    # Initialize providers via factories
+    llm_provider = create_llm_provider()
+    embedding_provider = create_embedding_provider()
+
+    if not llm_provider.is_available():
+        logger.warning(
+            f"LLM provider '{llm_provider.provider_name}' has no API key configured, "
+            "using mock responses"
+        )
     else:
-        logger.info("OpenAI client initialized")
+        logger.info(
+            f"LLM provider '{llm_provider.provider_name}' initialized "
+            f"(model: {llm_provider.model})"
+        )
+
+    if not embedding_provider.is_available():
+        logger.warning(
+            f"Embedding provider '{embedding_provider.provider_name}' is not available"
+        )
 
     yield
 
@@ -188,6 +204,9 @@ class HealthResponse(BaseModel):
     version: str
     model: str
     api_available: bool
+    llm_provider: str = "openai"
+    embedding_provider: str = "openai"
+    embedding_dimension: int = 1536
 
 
 def get_emotion_template(emotion: str) -> Dict[str, Any]:
@@ -218,39 +237,6 @@ def build_conversation_context(
     return "\n".join(context_parts)
 
 
-async def generate_with_openai(message: str, emotion: str, context: str = "") -> str:
-    """Generate response using OpenAI API"""
-    try:
-        template = get_emotion_template(emotion)
-
-        messages = [{"role": "system", "content": template["system_prompt"]}]
-
-        # Add conversation context if available
-        if context:
-            messages.append(
-                {
-                    "role": "system",
-                    "content": f"Recent conversation context:\n{context}",
-                }
-            )
-
-        messages.append({"role": "user", "content": message})
-
-        response = await openai.AsyncOpenAI().chat.completions.create(
-            model=DEFAULT_MODEL,
-            messages=messages,
-            max_tokens=MAX_TOKENS,
-            temperature=TEMPERATURE,
-            stream=False,
-        )
-
-        return response.choices[0].message.content.strip()
-
-    except Exception as e:
-        logger.error(f"OpenAI API error: {e}")
-        raise
-
-
 def generate_mock_response(message: str, emotion: str) -> str:
     """Generate mock empathetic response when API is unavailable"""
     template = get_emotion_template(emotion)
@@ -272,29 +258,29 @@ def generate_mock_response(message: str, emotion: str) -> str:
 async def generate_response(request: Request, llm_request: LLMRequest):
     """
     Generate empathetic AI response based on user's emotional state
-
-    Provides contextually appropriate, emotionally intelligent responses
-    tailored to the detected emotion and conversation history.
-
-    Args:
-        llm_request: LLM request with message, emotion, and context
-
-    Returns:
-        LLMResponse with empathetic response and metadata
     """
     try:
         logger.info(f"Generating response for emotion: {llm_request.emotion}")
 
         # Build conversation context
         context = build_conversation_context(llm_request.conversation_history)
+        template = get_emotion_template(llm_request.emotion)
 
         # Generate response
-        if os.getenv("OPENAI_API_KEY"):
-            response_text = await generate_with_openai(
-                llm_request.message, llm_request.emotion, context
-            )
-            confidence = 0.9
-            response_type = "ai_generated"
+        if llm_provider and llm_provider.is_available():
+            try:
+                response_text = await llm_provider.generate_chat_response(
+                    system_prompt=template["system_prompt"],
+                    user_message=llm_request.message,
+                    context=context,
+                )
+                confidence = 0.9
+                response_type = "ai_generated"
+            except Exception as e:
+                logger.warning(f"LLM provider error, falling back to mock: {e}")
+                response_text = generate_mock_response(llm_request.message, llm_request.emotion)
+                confidence = 0.6
+                response_type = "mock_response"
         else:
             response_text = generate_mock_response(llm_request.message, llm_request.emotion)
             confidence = 0.6
@@ -329,14 +315,6 @@ async def generate_response(request: Request, llm_request: LLMRequest):
 async def analyze_message(request: Request, body: dict):
     """
     Analyze message content for emotional context and metadata
-
-    Provides deeper analysis of user messages to inform better responses.
-
-    Args:
-        body: Dictionary containing 'message' field
-
-    Returns:
-        Dictionary with emotional analysis and metadata
     """
     try:
         message = body.get("message", "")
@@ -443,30 +421,25 @@ class EmbeddingResponse(BaseModel):
 
 @app.post("/embedding", response_model=EmbeddingResponse)
 @limiter.limit("120/minute")
-async def generate_embedding(request: Request, body: EmbeddingRequest):
+async def generate_embedding_endpoint(request: Request, body: EmbeddingRequest):
     """
-    Generate text embedding using OpenAI text-embedding-3-small model.
-    Returns a 1536-dimensional vector.
+    Generate text embedding using the configured embedding provider.
     """
     try:
-        if not os.getenv("OPENAI_API_KEY"):
-            raise HTTPException(status_code=503, detail="OpenAI API key not configured")
+        if not embedding_provider or not embedding_provider.is_available():
+            raise HTTPException(
+                status_code=503,
+                detail=f"Embedding provider '{embedding_provider.provider_name if embedding_provider else 'none'}' not configured",
+            )
 
-        client = openai.AsyncOpenAI()
-        response = await client.embeddings.create(
-            model="text-embedding-3-small",
-            input=body.text,
-        )
-
-        embedding = response.data[0].embedding
+        embedding = await embedding_provider.generate_embedding(body.text)
         return EmbeddingResponse(embedding=embedding)
 
-    except openai.OpenAIError as e:
-        logger.error(f"OpenAI embedding error: {e}")
-        raise HTTPException(status_code=503, detail="Embedding generation failed")
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error generating embedding: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"Embedding error ({embedding_provider.provider_name if embedding_provider else 'none'}): {e}")
+        raise HTTPException(status_code=503, detail="Embedding generation failed")
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -476,8 +449,11 @@ async def health_check():
         status="healthy",
         service="llm-service",
         version="1.0.0",
-        model=DEFAULT_MODEL,
-        api_available=bool(os.getenv("OPENAI_API_KEY")),
+        model=llm_provider.model if llm_provider else "none",
+        api_available=bool(llm_provider and llm_provider.is_available()),
+        llm_provider=llm_provider.provider_name if llm_provider else "none",
+        embedding_provider=embedding_provider.provider_name if embedding_provider else "none",
+        embedding_dimension=embedding_provider.dimension if embedding_provider else 0,
     )
 
 
@@ -512,34 +488,14 @@ def _keyword_emotion_fallback(text: str) -> tuple[str, float]:
 @limiter.limit("60/minute")
 async def analyze_emotion_text(request: Request, body: EmotionAnalysisRequest):
     """
-    Analyze text to detect the primary emotion using GPT-3.5-turbo.
+    Analyze text to detect the primary emotion using the configured LLM provider.
     Falls back to keyword-based detection when API is unavailable.
     Returns AD-1 compliant emotion classification.
     """
     try:
-        if os.getenv("OPENAI_API_KEY"):
+        if llm_provider and llm_provider.is_available():
             try:
-                client = openai.AsyncOpenAI()
-                response = await client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": (
-                                "You are an emotion classifier. Classify the user's text into exactly one of these emotions: "
-                                "happy, sad, angry, anxious, calm, surprised, excited, neutral. "
-                                "Also provide a confidence score between 0 and 1. "
-                                "Respond ONLY with JSON: {\"emotion\": \"...\", \"confidence\": 0.X}"
-                            ),
-                        },
-                        {"role": "user", "content": body.text},
-                    ],
-                    max_tokens=50,
-                    temperature=0.1,
-                )
-
-                result_text = response.choices[0].message.content.strip()
-                result = json.loads(result_text)
+                result = await llm_provider.classify_emotion(body.text, AD1_EMOTIONS)
 
                 emotion = result.get("emotion", "neutral").lower()
                 if emotion not in AD1_EMOTIONS:
@@ -553,7 +509,7 @@ async def analyze_emotion_text(request: Request, body: EmotionAnalysisRequest):
                 )
 
             except Exception as e:
-                logger.warning(f"GPT emotion analysis failed, using fallback: {e}")
+                logger.warning(f"LLM emotion analysis failed, using fallback: {e}")
                 emotion, confidence = _keyword_emotion_fallback(body.text)
                 return EmotionAnalysisResponse(
                     emotion=emotion,

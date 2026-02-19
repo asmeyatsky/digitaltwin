@@ -342,12 +342,19 @@ services:
     build:
       context: ./services/llm-service
       dockerfile: Dockerfile
+      args:
+        INCLUDE_LOCAL_EMBEDDINGS: ${INCLUDE_LOCAL_EMBEDDINGS:-false}
     container_name: digitaltwin-llm
     ports:
       - "8004:8004"
     environment:
       - PYTHONUNBUFFERED=1
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - LLM_MODEL=${LLM_MODEL}
+      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-openai}
       - SERVICE_API_KEY=${SERVICE_API_KEY}
       - CORS_ORIGINS=${CORS_ORIGINS}
     networks:
