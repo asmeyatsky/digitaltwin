@@ -1067,3 +1067,248 @@ export async function getUnlockedAchievements(): Promise<
 > {
   return request<UserAchievement[]>("/api/achievements/unlocked");
 }
+
+// ---------------------------------------------------------------------------
+// Community Forums & Peer Support API
+// ---------------------------------------------------------------------------
+
+export type GroupCategory =
+  | "Support"
+  | "Interest"
+  | "Wellness"
+  | "Mindfulness"
+  | "Relationships";
+
+export type CommunityRole = "Member" | "Moderator";
+
+export interface CommunityGroup {
+  id: string;
+  name: string;
+  description: string;
+  category: GroupCategory;
+  isModerated: boolean;
+  createdByUserId: string;
+  memberCount: number;
+  createdAt: string;
+}
+
+export interface CommunityPost {
+  id: string;
+  groupId: string;
+  authorUserId: string;
+  title: string;
+  content: string;
+  isAnonymous: boolean;
+  likeCount: number;
+  replyCount: number;
+  createdAt: string;
+}
+
+export interface CommunityReply {
+  id: string;
+  postId: string;
+  authorUserId: string;
+  content: string;
+  isAnonymous: boolean;
+  likeCount: number;
+  createdAt: string;
+}
+
+export interface CommunityMembership {
+  id: string;
+  groupId: string;
+  userId: string;
+  role: CommunityRole;
+  joinedAt: string;
+}
+
+export interface CommunityGroupsResponse {
+  groups: CommunityGroup[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface CommunityPostsResponse {
+  posts: CommunityPost[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface CommunityPostDetailResponse {
+  post: CommunityPost;
+  replies: CommunityReply[];
+  replyCount: number;
+}
+
+export async function createCommunityGroup(
+  name: string,
+  description: string,
+  category: GroupCategory
+): Promise<ApiResponse<CommunityGroup>> {
+  return request<CommunityGroup>("/api/community/groups", {
+    method: "POST",
+    body: JSON.stringify({ Name: name, Description: description, Category: category }),
+  });
+}
+
+export async function getCommunityGroups(
+  category?: GroupCategory,
+  search?: string,
+  page: number = 1,
+  pageSize: number = 20
+): Promise<ApiResponse<CommunityGroupsResponse>> {
+  const params = new URLSearchParams();
+  if (category) params.set("category", category);
+  if (search) params.set("search", search);
+  params.set("page", String(page));
+  params.set("pageSize", String(pageSize));
+  return request<CommunityGroupsResponse>(
+    `/api/community/groups?${params.toString()}`
+  );
+}
+
+export async function getCommunityGroupById(
+  groupId: string
+): Promise<ApiResponse<CommunityGroup>> {
+  return request<CommunityGroup>(`/api/community/groups/${groupId}`);
+}
+
+export async function joinCommunityGroup(
+  groupId: string
+): Promise<ApiResponse<CommunityMembership>> {
+  return request<CommunityMembership>(`/api/community/groups/${groupId}/join`, {
+    method: "POST",
+  });
+}
+
+export async function leaveCommunityGroup(
+  groupId: string
+): Promise<ApiResponse<void>> {
+  return request<void>(`/api/community/groups/${groupId}/leave`, {
+    method: "POST",
+  });
+}
+
+export async function createCommunityPost(
+  groupId: string,
+  title: string,
+  content: string,
+  isAnonymous: boolean
+): Promise<ApiResponse<CommunityPost>> {
+  return request<CommunityPost>(`/api/community/groups/${groupId}/posts`, {
+    method: "POST",
+    body: JSON.stringify({ Title: title, Content: content, IsAnonymous: isAnonymous }),
+  });
+}
+
+export async function getCommunityPosts(
+  groupId: string,
+  page: number = 1,
+  pageSize: number = 20
+): Promise<ApiResponse<CommunityPostsResponse>> {
+  return request<CommunityPostsResponse>(
+    `/api/community/groups/${groupId}/posts?page=${page}&pageSize=${pageSize}`
+  );
+}
+
+export async function getCommunityPostById(
+  postId: string
+): Promise<ApiResponse<CommunityPostDetailResponse>> {
+  return request<CommunityPostDetailResponse>(`/api/community/posts/${postId}`);
+}
+
+export async function replyToCommunityPost(
+  postId: string,
+  content: string,
+  isAnonymous: boolean
+): Promise<ApiResponse<CommunityReply>> {
+  return request<CommunityReply>(`/api/community/posts/${postId}/replies`, {
+    method: "POST",
+    body: JSON.stringify({ Content: content, IsAnonymous: isAnonymous }),
+  });
+}
+
+export async function likeCommunityPost(
+  postId: string
+): Promise<ApiResponse<void>> {
+  return request<void>(`/api/community/posts/${postId}/like`, {
+    method: "POST",
+  });
+}
+
+export async function likeCommunityReply(
+  replyId: string
+): Promise<ApiResponse<void>> {
+  return request<void>(`/api/community/replies/${replyId}/like`, {
+    method: "POST",
+  });
+}
+
+export async function getMyCommunityGroups(): Promise<
+  ApiResponse<{ groups: CommunityGroup[] }>
+> {
+  return request<{ groups: CommunityGroup[] }>("/api/community/my-groups");
+}
+
+export async function getSuggestedCommunityGroups(): Promise<
+  ApiResponse<{ groups: CommunityGroup[] }>
+> {
+  return request<{ groups: CommunityGroup[] }>("/api/community/suggested");
+}
+
+// ---------------------------------------------------------------------------
+// Content Moderation API
+// ---------------------------------------------------------------------------
+
+export type ReportReason =
+  | "Harassment"
+  | "Spam"
+  | "SelfHarm"
+  | "Inappropriate"
+  | "Misinformation"
+  | "Other";
+
+export type ReportStatus = "Pending" | "Reviewed" | "Actioned" | "Dismissed";
+
+export type ModerationAction =
+  | "None"
+  | "Warning"
+  | "ContentRemoved"
+  | "UserSuspended"
+  | "UserBanned";
+
+export type ModerationContentType = "Post" | "Reply" | "Message";
+
+export interface ContentReport {
+  id: string;
+  reporterUserId: string;
+  contentType: ModerationContentType;
+  contentId: string;
+  reason: ReportReason;
+  description?: string;
+  status: ReportStatus;
+  action: ModerationAction;
+  reviewedByUserId?: string;
+  reviewNotes?: string;
+  createdAt: string;
+  reviewedAt?: string;
+}
+
+export async function reportContent(
+  contentType: ModerationContentType,
+  contentId: string,
+  reason: ReportReason,
+  description?: string
+): Promise<ApiResponse<ContentReport>> {
+  return request<ContentReport>("/api/moderation/report", {
+    method: "POST",
+    body: JSON.stringify({
+      ContentType: contentType,
+      ContentId: contentId,
+      Reason: reason,
+      Description: description,
+    }),
+  });
+}

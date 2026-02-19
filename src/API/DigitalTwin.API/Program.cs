@@ -251,6 +251,8 @@ namespace DigitalTwin.API
             builder.Services.AddScoped<IPersonalHistoryService, PersonalHistoryService>();
             builder.Services.AddScoped<IFamilyService, FamilyService>();
             builder.Services.AddScoped<IAchievementService, AchievementService>();
+            builder.Services.AddScoped<ICommunityService, CommunityService>();
+            builder.Services.AddScoped<IModerationService, ModerationService>();
 
             // Event bus — RabbitMQ in production, in-memory fallback for dev
             var rabbitMqConnection = Environment.GetEnvironmentVariable("RabbitMQ__ConnectionString");

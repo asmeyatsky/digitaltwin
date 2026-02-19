@@ -73,6 +73,16 @@ namespace DigitalTwin.Core.Data
         public DbSet<FamilyMember> FamilyMembers { get; set; }
         public DbSet<FamilyInvite> FamilyInvites { get; set; }
 
+        // Community Entities
+        public DbSet<CommunityGroup> CommunityGroups { get; set; }
+        public DbSet<CommunityPost> CommunityPosts { get; set; }
+        public DbSet<CommunityReply> CommunityReplies { get; set; }
+        public DbSet<CommunityMembership> CommunityMemberships { get; set; }
+
+        // Moderation Entities
+        public DbSet<ContentReport> ContentReports { get; set; }
+        public DbSet<AutoModerationResult> AutoModerationResults { get; set; }
+
         // Notification Entities
         public DbSet<DeviceToken> DeviceTokens { get; set; }
 
@@ -407,6 +417,84 @@ namespace DigitalTwin.Core.Data
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
                 entity.HasIndex(e => new { e.UserId, e.AchievementDefinitionId }).IsUnique();
+            });
+
+            // Configure CommunityGroup
+            modelBuilder.Entity<CommunityGroup>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.Description).HasMaxLength(4000);
+                entity.Property(e => e.Category).IsRequired()
+                    .HasConversion<string>().HasMaxLength(30);
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => e.Category);
+                entity.HasIndex(e => e.CreatedByUserId);
+            });
+
+            // Configure CommunityPost
+            modelBuilder.Entity<CommunityPost>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Title).IsRequired().HasMaxLength(300);
+                entity.Property(e => e.Content).IsRequired();
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => e.GroupId);
+                entity.HasIndex(e => e.AuthorUserId);
+            });
+
+            // Configure CommunityReply
+            modelBuilder.Entity<CommunityReply>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Content).IsRequired();
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => e.PostId);
+                entity.HasIndex(e => e.AuthorUserId);
+            });
+
+            // Configure CommunityMembership
+            modelBuilder.Entity<CommunityMembership>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Role).IsRequired()
+                    .HasConversion<string>().HasMaxLength(20);
+                entity.Property(e => e.JoinedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => e.GroupId);
+                entity.HasIndex(e => e.UserId);
+                entity.HasIndex(e => new { e.GroupId, e.UserId }).IsUnique();
+            });
+
+            // Configure ContentReport
+            modelBuilder.Entity<ContentReport>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.ContentType).IsRequired()
+                    .HasConversion<string>().HasMaxLength(20);
+                entity.Property(e => e.Reason).IsRequired()
+                    .HasConversion<string>().HasMaxLength(30);
+                entity.Property(e => e.Status).IsRequired()
+                    .HasConversion<string>().HasMaxLength(20);
+                entity.Property(e => e.Action).IsRequired()
+                    .HasConversion<string>().HasMaxLength(30);
+                entity.Property(e => e.Description).HasMaxLength(4000);
+                entity.Property(e => e.ReviewNotes).HasMaxLength(4000);
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => new { e.ContentType, e.ContentId });
+                entity.HasIndex(e => e.ReporterUserId);
+                entity.HasIndex(e => e.Status);
+            });
+
+            // Configure AutoModerationResult
+            modelBuilder.Entity<AutoModerationResult>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.ContentType).IsRequired()
+                    .HasConversion<string>().HasMaxLength(20);
+                entity.Property(e => e.FlagReason).HasMaxLength(1000);
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => new { e.ContentType, e.ContentId });
+                entity.HasIndex(e => e.IsFlagged);
             });
 
             // Add indexes for performance
