@@ -11,13 +11,13 @@ namespace DigitalTwin.Core.Services
 
         public EncryptionService()
         {
-            var keyBase64 = Environment.GetEnvironmentVariable("ENCRYPTION_KEY");
+            var keyBase64 = Environment.GetEnvironmentVariable("Encryption__Key");
             if (string.IsNullOrEmpty(keyBase64))
-                throw new InvalidOperationException("ENCRYPTION_KEY environment variable must be set (base64-encoded 256-bit key)");
+                throw new InvalidOperationException("Encryption__Key environment variable must be set (base64-encoded 256-bit key)");
 
             _key = Convert.FromBase64String(keyBase64);
             if (_key.Length != 32)
-                throw new InvalidOperationException("ENCRYPTION_KEY must be a 256-bit (32-byte) key");
+                throw new InvalidOperationException("Encryption__Key must be a 256-bit (32-byte) key");
         }
 
         public (byte[] ciphertext, byte[] iv, byte[] tag) Encrypt(string plaintext)

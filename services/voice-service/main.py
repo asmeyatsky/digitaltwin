@@ -603,18 +603,22 @@ def _classify_voice_emotion(
     energy_norm = min(energy_mean / 0.1, 1.0)
     pitch_var_norm = min(pitch_std / 200.0, 1.0)
 
+    # AD-1 compliant: all 8 unified emotions
     scores = {
         "happy": 0.0,
         "sad": 0.0,
         "angry": 0.0,
         "anxious": 0.0,
         "calm": 0.0,
+        "surprised": 0.0,
+        "excited": 0.0,
         "neutral": 0.3,
     }
 
     # High pitch + high energy → Excited/Happy
     if pitch_norm > 0.5 and energy_norm > 0.5:
-        scores["happy"] = 0.5 + 0.3 * pitch_norm + 0.2 * energy_norm
+        scores["happy"] = 0.4 + 0.2 * pitch_norm + 0.2 * energy_norm
+        scores["excited"] = 0.3 + 0.3 * pitch_norm + 0.3 * energy_norm
 
     # Low pitch + low energy → Sad/Calm
     if pitch_norm < 0.4 and energy_norm < 0.4:
@@ -623,7 +627,8 @@ def _classify_voice_emotion(
 
     # High pitch variance → Anxious/Surprised
     if pitch_var_norm > 0.5:
-        scores["anxious"] = 0.4 + 0.4 * pitch_var_norm
+        scores["anxious"] = 0.3 + 0.3 * pitch_var_norm
+        scores["surprised"] = 0.3 + 0.4 * pitch_var_norm
 
     # High energy + low pitch → Angry
     if energy_norm > 0.6 and pitch_norm < 0.4:

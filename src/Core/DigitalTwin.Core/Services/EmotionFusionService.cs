@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using DigitalTwin.Core.Enums;
 using DigitalTwin.Core.Interfaces;
 
 namespace DigitalTwin.Core.Services
@@ -19,25 +20,17 @@ namespace DigitalTwin.Core.Services
             [EmotionSource.Text] = 0.3,
         };
 
-        // Emotion → (valence, arousal) mapping
-        private static readonly Dictionary<string, (double valence, double arousal)> EmotionDimensions = new(StringComparer.OrdinalIgnoreCase)
+        // Unified Emotion → (valence, arousal) mapping — AD-1 compliant
+        private static readonly Dictionary<Emotion, (double valence, double arousal)> EmotionDimensions = new()
         {
-            ["happy"] = (0.8, 0.6),
-            ["excited"] = (0.7, 0.9),
-            ["calm"] = (0.4, 0.1),
-            ["content"] = (0.5, 0.2),
-            ["neutral"] = (0.0, 0.3),
-            ["sad"] = (-0.7, 0.2),
-            ["angry"] = (-0.6, 0.8),
-            ["anxious"] = (-0.4, 0.7),
-            ["fear"] = (-0.6, 0.7),
-            ["fearful"] = (-0.6, 0.7),
-            ["disgust"] = (-0.5, 0.5),
-            ["disgusted"] = (-0.5, 0.5),
-            ["surprise"] = (0.1, 0.8),
-            ["surprised"] = (0.1, 0.8),
-            ["frustrated"] = (-0.5, 0.6),
-            ["curious"] = (0.3, 0.5),
+            [Emotion.Happy] = (0.8, 0.6),
+            [Emotion.Excited] = (0.7, 0.9),
+            [Emotion.Calm] = (0.4, 0.1),
+            [Emotion.Neutral] = (0.0, 0.3),
+            [Emotion.Sad] = (-0.7, 0.2),
+            [Emotion.Angry] = (-0.6, 0.8),
+            [Emotion.Anxious] = (-0.4, 0.7),
+            [Emotion.Surprised] = (0.1, 0.8),
         };
 
         private const double RecencyDecayHalfLifeSeconds = 30.0;
@@ -54,7 +47,7 @@ namespace DigitalTwin.Core.Services
             {
                 return Task.FromResult(new FusedEmotion
                 {
-                    PrimaryEmotion = "neutral",
+                    PrimaryEmotion = Emotion.Neutral,
                     Confidence = 0.5,
                     Signals = Array.Empty<EmotionSignal>()
                 });
@@ -63,7 +56,7 @@ namespace DigitalTwin.Core.Services
             var now = DateTime.UtcNow;
 
             // Calculate weighted scores for each emotion
-            var emotionScores = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            var emotionScores = new Dictionary<Emotion, double>();
             var totalWeight = 0.0;
 
             foreach (var signal in signals)
@@ -72,8 +65,7 @@ namespace DigitalTwin.Core.Services
                 var recencyWeight = ComputeRecencyWeight(signal.Timestamp, now);
                 var effectiveWeight = sourceWeight * recencyWeight * signal.Confidence;
 
-                var emotion = signal.Emotion.ToLowerInvariant();
-                emotionScores[emotion] = emotionScores.GetValueOrDefault(emotion, 0.0) + effectiveWeight;
+                emotionScores[signal.Emotion] = emotionScores.GetValueOrDefault(signal.Emotion, 0.0) + effectiveWeight;
                 totalWeight += effectiveWeight;
             }
 
@@ -81,7 +73,7 @@ namespace DigitalTwin.Core.Services
             {
                 return Task.FromResult(new FusedEmotion
                 {
-                    PrimaryEmotion = "neutral",
+                    PrimaryEmotion = Emotion.Neutral,
                     Confidence = 0.5,
                     Signals = signals
                 });
@@ -97,14 +89,14 @@ namespace DigitalTwin.Core.Services
             var primaryEmotion = sorted[0].Key;
             var primaryConfidence = sorted[0].Value;
 
-            // If max confidence is below threshold, return neutral
+            // If max confidence is below threshold, return Neutral
             if (primaryConfidence < ConfidenceThreshold)
             {
-                primaryEmotion = "neutral";
+                primaryEmotion = Emotion.Neutral;
                 primaryConfidence = 1.0 - sorted.Sum(kv => kv.Value);
             }
 
-            var secondaryEmotion = sorted.Count > 1 ? sorted[1].Key : null;
+            Emotion? secondaryEmotion = sorted.Count > 1 ? sorted[1].Key : null;
 
             // Compute valence and arousal from weighted emotion dimensions
             var valence = 0.0;
@@ -138,8 +130,6 @@ namespace DigitalTwin.Core.Services
         {
             var ageSeconds = (now - signalTime).TotalSeconds;
             if (ageSeconds <= 0) return 1.0;
-
-            // Exponential decay: weight = 0.5^(age / halfLife)
             return Math.Pow(0.5, ageSeconds / RecencyDecayHalfLifeSeconds);
         }
     }

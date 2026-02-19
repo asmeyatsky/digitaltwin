@@ -73,6 +73,31 @@ EMOTION_RESPONSE_TEMPLATES = {
             "It's good to hear from you. What would you like to talk about or work through?",
         ],
     },
+    # AD-1 compliant: templates for all 8 unified emotions
+    "calm": {
+        "system_prompt": "You are an empathetic AI companion. The user is feeling calm and at ease. Respond with a relaxed, grounded tone that maintains this peaceful state (max 100 words).",
+        "examples": [
+            "It sounds like you're in a really good place right now. I'm glad you're feeling at peace.",
+            "That sense of calm is wonderful. What's been helping you feel so centered?",
+            "I appreciate the peaceful energy you're bringing today. What's on your mind?",
+        ],
+    },
+    "surprised": {
+        "system_prompt": "You are an empathetic AI companion. The user is feeling surprised. Respond with curiosity and attentiveness, helping them process what surprised them (max 100 words).",
+        "examples": [
+            "Wow, that does sound unexpected! Tell me more about what happened.",
+            "I can understand why that caught you off guard. How are you feeling about it?",
+            "Surprises can be a lot to process. Take your time — I'm here to listen.",
+        ],
+    },
+    "excited": {
+        "system_prompt": "You are an empathetic AI companion. The user is feeling excited. Match their enthusiasm and energy while being genuine and supportive (max 100 words).",
+        "examples": [
+            "That's amazing! I can feel your excitement! Tell me all about it!",
+            "How exciting! I'd love to hear more about what has you so energized!",
+            "Your enthusiasm is contagious! What's got you feeling so pumped?",
+        ],
+    },
 }
 
 SERVICE_API_KEY = os.getenv("SERVICE_API_KEY", "")
@@ -281,7 +306,7 @@ async def generate_response(request: Request, llm_request: LLMRequest):
             response_emotion = "happy"
         elif llm_request.emotion in ["sad", "angry"]:
             response_emotion = "supportive"
-        elif llm_request.emotion in ["anxious", "worried"]:
+        elif llm_request.emotion in ["anxious"]:
             response_emotion = "calming"
 
         return LLMResponse(

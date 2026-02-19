@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using DigitalTwin.Core.Enums;
 
 namespace DigitalTwin.Core.Plugins
 {
@@ -27,16 +28,17 @@ namespace DigitalTwin.Core.Plugins
                     $"Adjust your tone and communication style based on the user's personality preferences: {traits}";
             }
 
-            // Default personality adjustments based on emotion
+            // AD-1 compliant: map emotion string to unified Emotion enum for tone adjustment
             if (!string.IsNullOrEmpty(context.Emotion))
             {
-                var emotion = context.Emotion.ToLowerInvariant();
+                var emotion = EmotionMapper.FromString(context.Emotion);
                 var toneAdjustment = emotion switch
                 {
-                    "sad" or "fearful" or "fear" or "anxious" => "Use a warm, gentle, and reassuring tone.",
-                    "angry" or "frustrated" => "Use a calm, patient, and validating tone.",
-                    "happy" or "excited" => "Match their energy with enthusiasm while being genuine.",
-                    "curious" => "Be informative and encouraging of their curiosity.",
+                    Emotion.Sad or Emotion.Anxious => "Use a warm, gentle, and reassuring tone.",
+                    Emotion.Angry => "Use a calm, patient, and validating tone.",
+                    Emotion.Happy or Emotion.Excited => "Match their energy with enthusiasm while being genuine.",
+                    Emotion.Surprised => "Acknowledge the surprise and be attentive to what caused it.",
+                    Emotion.Calm => "Maintain a relaxed, grounded conversational tone.",
                     _ => (string?)null
                 };
 

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using DigitalTwin.Core.Enums;
 
 namespace DigitalTwin.Core.Plugins
 {
@@ -12,6 +13,12 @@ namespace DigitalTwin.Core.Plugins
         public string Name => "MoodTrackingPlugin";
         public int Priority => 10;
 
+        // AD-1 compliant negative emotions from unified taxonomy
+        private static readonly Emotion[] NegativeEmotions = new[]
+        {
+            Emotion.Sad, Emotion.Angry, Emotion.Anxious
+        };
+
         public MoodTrackingPlugin(ILogger<MoodTrackingPlugin> logger)
         {
             _logger = logger;
@@ -19,11 +26,11 @@ namespace DigitalTwin.Core.Plugins
 
         public Task<PluginResult> ProcessAsync(PluginContext context)
         {
-            // Analyze emotion trend from recent memories
+            // Map recent memory emotions to unified taxonomy via EmotionMapper
             var recentEmotions = context.Memories
                 .OrderByDescending(m => m.CreatedAt)
                 .Take(5)
-                .Select(m => m.PrimaryEmotion.ToString().ToLowerInvariant())
+                .Select(m => EmotionMapper.FromEmotionType(m.PrimaryEmotion))
                 .ToList();
 
             var moodContext = new Dictionary<string, object>();
@@ -35,12 +42,11 @@ namespace DigitalTwin.Core.Plugins
                     .OrderByDescending(g => g.Count())
                     .First().Key;
 
-                moodContext["mood_trend"] = dominantMood;
-                moodContext["recent_emotions"] = recentEmotions;
+                moodContext["mood_trend"] = EmotionMapper.ToExternalString(dominantMood);
+                moodContext["recent_emotions"] = recentEmotions.Select(EmotionMapper.ToExternalString).ToList();
 
-                // Detect declining trend
-                var negativeEmotions = new[] { "sad", "angry", "fear", "fearful", "anxious", "frustrated", "disgust", "disgusted" };
-                var negativeCount = recentEmotions.Count(e => negativeEmotions.Contains(e));
+                // Detect declining trend using unified negative set
+                var negativeCount = recentEmotions.Count(e => NegativeEmotions.Contains(e));
 
                 if (negativeCount >= 3)
                 {

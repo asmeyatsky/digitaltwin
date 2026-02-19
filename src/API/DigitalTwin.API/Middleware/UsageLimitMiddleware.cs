@@ -86,13 +86,14 @@ namespace DigitalTwin.API.Middleware
                 var resetAt = DateTime.UtcNow.Date.AddDays(1);
                 context.Response.StatusCode = 429;
                 context.Response.ContentType = "application/json";
+                // AD-2 compliant envelope
                 await context.Response.WriteAsync(JsonSerializer.Serialize(new
                 {
                     success = false,
+                    data = new { remaining = 0, limit, resetAt = resetAt.ToString("O") },
+                    error = "RATE_LIMIT_EXCEEDED",
                     message = $"Usage limit exceeded for {resource}",
-                    remaining = 0,
-                    limit,
-                    resetAt = resetAt.ToString("O")
+                    timestamp = DateTime.UtcNow
                 }));
                 return;
             }

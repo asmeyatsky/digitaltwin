@@ -141,8 +141,9 @@ namespace DigitalTwin.Core.Services
                 // Analyze text emotion (keyword-based)
                 var textEmotion = AnalyzeMessageEmotion(message);
 
-                // Multi-modal emotion fusion
-                var fusedEmotionLabel = textEmotion.ToString();
+                // Multi-modal emotion fusion using unified Emotion enum (AD-1)
+                var unifiedEmotion = EmotionMapper.FromEmotionType(textEmotion);
+                var fusedEmotionLabel = EmotionMapper.ToExternalString(unifiedEmotion);
                 double fusedConfidence = 0.7;
 
                 if (_emotionFusionService != null)
@@ -152,19 +153,19 @@ namespace DigitalTwin.Core.Services
                         new EmotionSignal
                         {
                             Source = EmotionSource.Text,
-                            Emotion = textEmotion.ToString().ToLowerInvariant(),
+                            Emotion = unifiedEmotion,
                             Confidence = 0.6,
                             Timestamp = DateTime.UtcNow
                         }
                     };
 
-                    // Check session metadata for voice/face signals
+                    // Check session metadata for voice/face signals — map strings via EmotionMapper
                     if (session.ConversationContext.TryGetValue("voice_emotion", out var voiceEmo) && voiceEmo is JsonElement voiceEl)
                     {
                         signals.Add(new EmotionSignal
                         {
                             Source = EmotionSource.Voice,
-                            Emotion = voiceEl.GetString() ?? "neutral",
+                            Emotion = EmotionMapper.FromString(voiceEl.GetString() ?? "neutral"),
                             Confidence = 0.7,
                             Timestamp = DateTime.UtcNow
                         });
@@ -175,14 +176,14 @@ namespace DigitalTwin.Core.Services
                         signals.Add(new EmotionSignal
                         {
                             Source = EmotionSource.Face,
-                            Emotion = faceEl.GetString() ?? "neutral",
+                            Emotion = EmotionMapper.FromString(faceEl.GetString() ?? "neutral"),
                             Confidence = 0.8,
                             Timestamp = DateTime.UtcNow
                         });
                     }
 
                     var fused = await _emotionFusionService.FuseEmotionsAsync(signals.ToArray());
-                    fusedEmotionLabel = fused.PrimaryEmotion;
+                    fusedEmotionLabel = EmotionMapper.ToExternalString(fused.PrimaryEmotion);
                     fusedConfidence = fused.Confidence;
                 }
 

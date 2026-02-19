@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using DigitalTwin.Core.DTOs;
 
 namespace DigitalTwin.API.Controllers
 {
@@ -117,14 +118,16 @@ namespace DigitalTwin.API.Controllers
                 var responseContent = await response.Content.ReadAsStringAsync();
 
                 if (!response.IsSuccessStatusCode)
-                    return StatusCode((int)response.StatusCode, new { success = false, message = "Voice emotion analysis failed" });
+                    return StatusCode((int)response.StatusCode, ApiResponse.Fail("Voice emotion analysis failed"));
 
-                return Content(responseContent, "application/json");
+                // Wrap upstream response in AD-2 envelope
+                var emotionData = System.Text.Json.JsonSerializer.Deserialize<object>(responseContent);
+                return Ok(ApiResponse<object>.Ok(emotionData));
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error proxying voice emotion analysis request");
-                return StatusCode(500, new { success = false, message = "Failed to analyze voice emotion" });
+                return StatusCode(500, ApiResponse.Fail("Failed to analyze voice emotion"));
             }
         }
 

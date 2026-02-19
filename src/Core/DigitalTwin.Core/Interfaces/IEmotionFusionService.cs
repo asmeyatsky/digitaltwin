@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using DigitalTwin.Core.Enums;
 
 namespace DigitalTwin.Core.Interfaces
 {
@@ -18,16 +19,16 @@ namespace DigitalTwin.Core.Interfaces
     public class EmotionSignal
     {
         public EmotionSource Source { get; set; }
-        public string Emotion { get; set; } = "neutral";
+        public Emotion Emotion { get; set; } = Emotion.Neutral;
         public double Confidence { get; set; }
         public DateTime Timestamp { get; set; } = DateTime.UtcNow;
     }
 
     public class FusedEmotion
     {
-        public string PrimaryEmotion { get; set; } = "neutral";
+        public Emotion PrimaryEmotion { get; set; } = Emotion.Neutral;
         public double Confidence { get; set; }
-        public string? SecondaryEmotion { get; set; }
+        public Emotion? SecondaryEmotion { get; set; }
         public EmotionSignal[] Signals { get; set; } = Array.Empty<EmotionSignal>();
         public double Valence { get; set; } // -1 (negative) to 1 (positive)
         public double Arousal { get; set; } // 0 (calm) to 1 (excited)

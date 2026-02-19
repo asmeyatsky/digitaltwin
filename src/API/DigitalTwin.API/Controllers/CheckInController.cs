@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using DigitalTwin.Core.DTOs;
 using DigitalTwin.Core.Interfaces;
 
 namespace DigitalTwin.API.Controllers
@@ -26,10 +27,10 @@ namespace DigitalTwin.API.Controllers
         {
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(userId))
-                return Unauthorized();
+                return Unauthorized(ApiResponse.Fail("User not authenticated"));
 
             var checkIns = await _checkInService.GetPendingCheckInsAsync(userId);
-            return Ok(new { success = true, data = checkIns });
+            return Ok(ApiResponse<object>.Ok(checkIns));
         }
 
         [HttpPost("{id}/respond")]
@@ -37,10 +38,10 @@ namespace DigitalTwin.API.Controllers
         {
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(userId))
-                return Unauthorized();
+                return Unauthorized(ApiResponse.Fail("User not authenticated"));
 
             await _checkInService.RespondToCheckInAsync(id, request.Response);
-            return Ok(new { success = true });
+            return Ok(ApiResponse.Ok("Check-in response recorded"));
         }
 
         [HttpPost("evaluate")]
@@ -48,16 +49,16 @@ namespace DigitalTwin.API.Controllers
         {
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(userId))
-                return Unauthorized();
+                return Unauthorized(ApiResponse.Fail("User not authenticated"));
 
             var suggestion = await _checkInService.EvaluateCheckInAsync(userId);
             if (suggestion == null)
-                return Ok(new { success = true, data = (object?)null });
+                return Ok(ApiResponse<object>.Ok(null, "No check-in needed"));
 
             // Record the check-in
             await _checkInService.RecordCheckInAsync(userId, suggestion.Type, suggestion.EmotionContext);
 
-            return Ok(new { success = true, data = suggestion });
+            return Ok(ApiResponse<object>.Ok(suggestion));
         }
     }
 

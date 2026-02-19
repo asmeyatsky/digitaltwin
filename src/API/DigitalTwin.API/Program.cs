@@ -174,8 +174,8 @@ namespace DigitalTwin.API
             builder.Services.AddScoped<IUsageLimitService, UsageLimitService>();
             builder.Services.AddScoped<IProactiveCheckInService, ProactiveCheckInService>();
 
-            // Encryption — optional, enabled when ENCRYPTION_KEY is set
-            var encryptionKey = Environment.GetEnvironmentVariable("ENCRYPTION_KEY");
+            // Encryption — optional, enabled when Encryption__Key is set (AD-4 compliant)
+            var encryptionKey = Environment.GetEnvironmentVariable("Encryption__Key");
             if (!string.IsNullOrEmpty(encryptionKey))
             {
                 builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
