@@ -30,7 +30,7 @@ namespace DigitalTwin.Core.Plugins
             var recentEmotions = context.Memories
                 .OrderByDescending(m => m.CreatedAt)
                 .Take(5)
-                .Select(m => EmotionMapper.FromEmotionType(m.PrimaryEmotion))
+                .Select(m => m.PrimaryEmotion)
                 .ToList();
 
             var moodContext = new Dictionary<string, object>();

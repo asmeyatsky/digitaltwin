@@ -1,47 +1,33 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using DigitalTwin.Core.Data;
 using DigitalTwin.Core.DTOs;
-using DigitalTwin.Core.Entities;
-using DigitalTwin.Core.Enums;
+using DigitalTwin.Core.Interfaces;
 using System.ComponentModel.DataAnnotations;
 
 namespace DigitalTwin.API.Controllers
 {
     /// <summary>
     /// Conversation Controller for Emotional Companion AI
-    /// 
+    ///
     /// Architectural Intent:
     /// - Provides REST API for conversational interactions
-    /// - Integrates with emotion detection and LLM services
-    /// - Maintains conversation context and memory
-    /// - Supports real-time emotional responses
-    /// 
-    /// Key Features:
-    /// 1. Start/stop conversation sessions
-    /// 2. Send messages with emotion detection
-    /// 3. Get conversation history
-    /// 4. Manage conversation memory
-    /// 5. Real-time emotional responses
+    /// - Delegates all business logic to IConversationService
+    /// - Handles only HTTP concerns (auth, model binding, responses)
     /// </summary>
     [ApiController]
     [Route("api/[controller]")]
     [Authorize]
     public class ConversationController : ControllerBase
     {
-        private readonly DigitalTwinDbContext _context;
+        private readonly IConversationService _conversationService;
         private readonly ILogger<ConversationController> _logger;
-        private readonly IHttpClientFactory _httpClientFactory;
 
         public ConversationController(
-            DigitalTwinDbContext context,
-            ILogger<ConversationController> logger,
-            IHttpClientFactory httpClientFactory)
+            IConversationService conversationService,
+            ILogger<ConversationController> logger)
         {
-            _context = context;
+            _conversationService = conversationService;
             _logger = logger;
-            _httpClientFactory = httpClientFactory;
         }
 
         /// <summary>
@@ -53,48 +39,25 @@ namespace DigitalTwin.API.Controllers
         {
             try
             {
-                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
+                var userId = GetUserId();
+                if (userId == null)
                 {
                     return Unauthorized(ApiResponse.Fail("User not authenticated"));
                 }
 
-                // Create conversation session with deterministic TwinId per user
-                var sessionId = Guid.NewGuid();
-                var twinId = Guid.Parse(userId.PadRight(32, '0').Substring(0, 32).Insert(8, "-").Insert(13, "-").Insert(18, "-").Insert(23, "-"));
-                var interaction = new AITwinInteraction
-                {
-                    Id = sessionId,
-                    TwinId = twinId,
-                    MessageType = "conversation_start",
-                    Content = request.Message,
-                    Timestamp = DateTime.UtcNow,
-                    Context = new Dictionary<string, object>
-                    {
-                        ["user_id"] = userId,
-                        ["session_id"] = sessionId,
-                        ["platform"] = "web",
-                        ["start_time"] = DateTime.UtcNow
-                    },
-                    EmotionalTone = EmotionalTone.Neutral,
-                    Response = new AITwinInteractionResponse
-                    {
-                        Content = "Hello! I'm here to help and support you. How are you feeling today?",
-                        EmotionalTone = EmotionalTone.Happy,
-                        Confidence = 0.9,
-                        Timestamp = DateTime.UtcNow
-                    }
-                };
+                var result = await _conversationService.StartConversationAsync(userId.Value, request.Message);
 
-                _context.AITwinInteractions.Add(interaction);
-                await _context.SaveChangesAsync();
+                if (!result.Success)
+                {
+                    return StatusCode(500, ApiResponse.Fail(result.ErrorMessage ?? "Failed to start conversation"));
+                }
 
                 return Ok(ApiResponse<ConversationStartResponse>.Ok(new ConversationStartResponse
                 {
-                    SessionId = sessionId,
-                    Response = interaction.Response.Content,
-                    EmotionalTone = interaction.Response.EmotionalTone.ToString(),
-                    Timestamp = interaction.Response.Timestamp
+                    SessionId = result.SessionId ?? Guid.NewGuid(),
+                    Response = result.Response,
+                    EmotionalTone = result.DetectedEmotion.ToString(),
+                    Timestamp = result.ResponseTime ?? DateTime.UtcNow
                 }));
             }
             catch (Exception ex)
@@ -113,53 +76,26 @@ namespace DigitalTwin.API.Controllers
         {
             try
             {
-                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
+                var userId = GetUserId();
+                if (userId == null)
                 {
                     return Unauthorized(ApiResponse.Fail("User not authenticated"));
                 }
 
-                // Get detected emotion from DeepFace service (placeholder for now)
-                var detectedEmotion = await DetectEmotionAsync(request.Message);
-                
-                // Generate AI response using LLM service (placeholder for now)
-                var aiResponse = await GenerateAIResponseAsync(request.Message, detectedEmotion);
+                var result = await _conversationService.ProcessMessageAsync(
+                    userId.Value, request.ConversationId, request.Message);
 
-                // Store interaction with consistent TwinId per user
-                var twinId = Guid.Parse(userId.PadRight(32, '0').Substring(0, 32).Insert(8, "-").Insert(13, "-").Insert(18, "-").Insert(23, "-"));
-                var interaction = new AITwinInteraction
+                if (!result.Success)
                 {
-                    Id = Guid.NewGuid(),
-                    TwinId = twinId,
-                    MessageType = "user_message",
-                    Content = request.Message,
-                    Timestamp = DateTime.UtcNow,
-                    Context = new Dictionary<string, object>
-                    {
-                        ["user_id"] = userId,
-                        ["conversation_id"] = request.ConversationId,
-                        ["detected_emotion"] = detectedEmotion,
-                        ["response_time"] = DateTime.UtcNow
-                    },
-                    EmotionalTone = ParseEmotionalTone(detectedEmotion),
-                    Response = new AITwinInteractionResponse
-                    {
-                        Content = aiResponse,
-                        EmotionalTone = DetermineResponseEmotion(detectedEmotion),
-                        Confidence = 0.85,
-                        Timestamp = DateTime.UtcNow
-                    }
-                };
-
-                _context.AITwinInteractions.Add(interaction);
-                await _context.SaveChangesAsync();
+                    return StatusCode(500, ApiResponse.Fail(result.ErrorMessage ?? "Failed to process message"));
+                }
 
                 return Ok(ApiResponse<ConversationMessageResponse>.Ok(new ConversationMessageResponse
                 {
-                    Response = aiResponse,
-                    DetectedEmotion = detectedEmotion,
-                    AIEmotionalTone = interaction.Response.EmotionalTone.ToString(),
-                    ResponseTime = DateTime.UtcNow,
+                    Response = result.Response,
+                    DetectedEmotion = result.DetectedEmotion.ToString(),
+                    AIEmotionalTone = result.DetectedEmotion.ToString(),
+                    ResponseTime = result.ResponseTime ?? DateTime.UtcNow,
                     ConversationId = request.ConversationId
                 }));
             }
@@ -181,45 +117,32 @@ namespace DigitalTwin.API.Controllers
         {
             try
             {
-                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
+                var userId = GetUserId();
+                if (userId == null)
                 {
                     return Unauthorized(ApiResponse.Fail("User not authenticated"));
                 }
 
-                var interactions = await _context.AITwinInteractions
-                    .Where(i => i.Context.ContainsKey("conversation_id") && 
-                                i.Context.ContainsKey("user_id") &&
-                                i.Context["user_id"].ToString() == userId)
-                    .OrderBy(i => i.Timestamp)
-                    .Skip((page - 1) * pageSize)
-                    .Take(pageSize)
-                    .ToListAsync();
+                var result = await _conversationService.GetConversationHistoryAsync(
+                    userId.Value, conversationId, page, pageSize);
 
-                var history = interactions.Select(i => new ConversationMessage
+                var messages = result.Messages.Select(m => new ConversationMessageDto
                 {
-                    Id = i.Id,
-                    Content = i.Content,
-                    Response = i.Response?.Content,
-                    UserEmotion = i.EmotionalTone.ToString(),
-                    AIEmotion = i.Response?.EmotionalTone.ToString(),
-                    Timestamp = i.Timestamp,
-                    MessageType = i.MessageType
+                    Id = m.Id,
+                    Content = m.Content,
+                    Response = m.Response,
+                    UserEmotion = m.UserEmotion,
+                    AIEmotion = m.AIEmotion,
+                    Timestamp = m.Timestamp,
+                    MessageType = m.MessageType
                 }).ToList();
-
-                // Get total count for proper pagination
-                var totalCount = await _context.AITwinInteractions
-                    .Where(i => i.Context.ContainsKey("conversation_id") &&
-                                i.Context.ContainsKey("user_id") &&
-                                i.Context["user_id"].ToString() == userId)
-                    .CountAsync();
 
                 return Ok(ApiResponse<ConversationHistoryResponse>.Ok(new ConversationHistoryResponse
                 {
-                    Messages = history,
-                    TotalCount = totalCount,
-                    Page = page,
-                    PageSize = pageSize
+                    Messages = messages,
+                    TotalCount = result.TotalCount,
+                    Page = result.Page,
+                    PageSize = result.PageSize
                 }));
             }
             catch (Exception ex)
@@ -238,32 +161,18 @@ namespace DigitalTwin.API.Controllers
         {
             try
             {
-                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
+                var userId = GetUserId();
+                if (userId == null)
                 {
                     return Unauthorized(ApiResponse.Fail("User not authenticated"));
                 }
 
-                // Log conversation end
-                var interaction = new AITwinInteraction
-                {
-                    Id = Guid.NewGuid(),
-                    TwinId = Guid.NewGuid(),
-                    MessageType = "conversation_end",
-                    Content = "Conversation ended",
-                    Timestamp = DateTime.UtcNow,
-                    Context = new Dictionary<string, object>
-                    {
-                        ["user_id"] = userId,
-                        ["conversation_id"] = request.ConversationId,
-                        ["end_time"] = DateTime.UtcNow,
-                        ["session_duration"] = request.SessionDuration?.TotalSeconds
-                    },
-                    EmotionalTone = EmotionalTone.Neutral
-                };
+                var success = await _conversationService.EndConversationAsync(userId.Value);
 
-                _context.AITwinInteractions.Add(interaction);
-                await _context.SaveChangesAsync();
+                if (!success)
+                {
+                    return NotFound(ApiResponse.Fail("No active conversation found"));
+                }
 
                 return Ok(ApiResponse.Ok("Conversation ended successfully"));
             }
@@ -274,93 +183,23 @@ namespace DigitalTwin.API.Controllers
             }
         }
 
-        private async Task<string> DetectEmotionAsync(string message)
+        private Guid? GetUserId()
         {
-            try
+            var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim))
             {
-                var client = _httpClientFactory.CreateClient("DeepFace");
-                var response = await client.PostAsJsonAsync("/detect-emotion",
-                    new { text = message });
-                
-                if (response.IsSuccessStatusCode)
-                {
-                    var result = await response.Content.ReadFromJsonAsync<EmotionDetectionResult>();
-                    return result?.Emotion ?? "neutral";
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to detect emotion via ML service");
+                return null;
             }
 
-            // Fallback: simple keyword-based emotion detection
-            var lowerMessage = message.ToLower();
-            if (lowerMessage.Contains("happy") || lowerMessage.Contains("excited")) return "happy";
-            if (lowerMessage.Contains("sad") || lowerMessage.Contains("depressed")) return "sad";
-            if (lowerMessage.Contains("angry") || lowerMessage.Contains("frustrated")) return "angry";
-            if (lowerMessage.Contains("worried") || lowerMessage.Contains("anxious")) return "anxious";
-            
-            return "neutral";
-        }
-
-        private async Task<string> GenerateAIResponseAsync(string userMessage, string detectedEmotion)
-        {
-            try
+            if (Guid.TryParse(userIdClaim, out var userId))
             {
-                var client = _httpClientFactory.CreateClient("LLM");
-                var response = await client.PostAsJsonAsync("/generate-response",
-                    new 
-                    { 
-                        message = userMessage,
-                        emotion = detectedEmotion,
-                        context = "emotional_companion"
-                    });
-                
-                if (response.IsSuccessStatusCode)
-                {
-                    var result = await response.Content.ReadFromJsonAsync<LLMResponse>();
-                    return result?.Response ?? GenerateFallbackResponse(userMessage, detectedEmotion);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to generate AI response via LLM service");
+                return userId;
             }
 
-            return GenerateFallbackResponse(userMessage, detectedEmotion);
-        }
-
-        private string GenerateFallbackResponse(string userMessage, string detectedEmotion)
-        {
-            return detectedEmotion switch
-            {
-                "happy" => "I'm so glad to hear you're feeling happy! Your positive energy is wonderful. What's bringing you joy today?",
-                "sad" => "I hear that you're feeling sad. I'm here for you, and we'll get through this together. Would you like to talk about what's on your mind?",
-                "angry" => "I understand you're feeling angry. Your feelings are valid. Let's take a deep breath together. What's been frustrating you?",
-                "anxious" => "I can sense you're feeling anxious. That's completely understandable. Let's work through this step by step. What's worrying you?",
-                "worried" => "I hear your concern. Let's break this down and look at it together. What specific aspect is troubling you most?",
-                _ => "Thank you for sharing that with me. I'm here to listen and support you. What would be most helpful right now?"
-            };
-        }
-
-        private EmotionalTone ParseEmotionalTone(string emotion)
-        {
-            return EmotionMapper.ToEmotionalTone(EmotionMapper.FromString(emotion));
-        }
-
-        private EmotionalTone DetermineResponseEmotion(string userEmotion)
-        {
-            var canonical = EmotionMapper.FromString(userEmotion);
-            // Choose an empathetic response tone based on what the user is feeling
-            var responseTone = canonical switch
-            {
-                Emotion.Sad => Emotion.Anxious,       // concerned
-                Emotion.Angry => Emotion.Calm,
-                Emotion.Happy or Emotion.Excited => Emotion.Happy,
-                Emotion.Anxious => Emotion.Calm,
-                _ => Emotion.Neutral
-            };
-            return EmotionMapper.ToEmotionalTone(responseTone);
+            // Generate a deterministic Guid from a non-Guid user identifier
+            var padded = userIdClaim.PadRight(32, '0').Substring(0, 32);
+            var formatted = padded.Insert(8, "-").Insert(13, "-").Insert(18, "-").Insert(23, "-");
+            return Guid.Parse(formatted);
         }
     }
 
@@ -401,13 +240,13 @@ namespace DigitalTwin.API.Controllers
 
     public class ConversationHistoryResponse
     {
-        public List<ConversationMessage> Messages { get; set; } = new();
+        public List<ConversationMessageDto> Messages { get; set; } = new();
         public int TotalCount { get; set; }
         public int Page { get; set; }
         public int PageSize { get; set; }
     }
 
-    public class ConversationMessage
+    public class ConversationMessageDto
     {
         public Guid Id { get; set; }
         public string Content { get; set; } = string.Empty;

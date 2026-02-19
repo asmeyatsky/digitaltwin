@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using DigitalTwin.Core.DTOs;
 using DigitalTwin.Core.Entities;
+using DigitalTwin.Core.Enums;
 
 namespace DigitalTwin.Core.Interfaces
 {
@@ -181,7 +182,7 @@ namespace DigitalTwin.Core.Interfaces
         /// <summary>
         /// Generates voice with specific emotional tone
         /// </summary>
-        Task<byte[]> SynthesizeEmotionalSpeechAsync(string text, EmotionalTone emotionalTone, AITwinVoiceConfiguration voiceConfig);
+        Task<byte[]> SynthesizeEmotionalSpeechAsync(string text, Emotion emotionalTone, AITwinVoiceConfiguration voiceConfig);
     }
 
     /// <summary>
@@ -202,7 +203,7 @@ namespace DigitalTwin.Core.Interfaces
         /// <summary>
         /// Generates emotional expression image
         /// </summary>
-        Task<byte[]> GenerateEmotionalExpressionAsync(EmotionalState emotionalState);
+        Task<byte[]> GenerateEmotionalExpressionAsync(Emotion emotionalState);
     }
 
     /// <summary>

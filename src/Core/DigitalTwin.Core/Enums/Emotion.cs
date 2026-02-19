@@ -2,8 +2,7 @@ namespace DigitalTwin.Core.Enums
 {
     /// <summary>
     /// Canonical emotion taxonomy used across all services.
-    /// Maps to/from legacy enums (EmotionType, EmotionalState, EmotionalTone)
-    /// via EmotionMapper.
+    /// String conversion via EmotionMapper.FromString / ToExternalString.
     /// </summary>
     public enum Emotion
     {

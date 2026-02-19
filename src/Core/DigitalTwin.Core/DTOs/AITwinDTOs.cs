@@ -1,10 +1,8 @@
 using System;
 using System.Collections.Generic;
 using DigitalTwin.Core.Entities;
+using DigitalTwin.Core.Enums;
 
-// Re-export commonly used enums for convenience
-using EmotionalTone = DigitalTwin.Core.Entities.EmotionalTone;
-using EmotionalState = DigitalTwin.Core.Entities.EmotionalState;
 using AITwinMemoryType = DigitalTwin.Core.Entities.AITwinMemoryType;
 using AITwinKnowledgeType = DigitalTwin.Core.Entities.AITwinKnowledgeType;
 using AITwinLearningMode = DigitalTwin.Core.Entities.AITwinLearningMode;
@@ -123,7 +121,7 @@ namespace DigitalTwin.Core.DTOs
         public DateTime LastMessageTime { get; set; }
         public List<AITwinConversationMessage> Messages { get; set; } = new();
         public List<string> Topics { get; set; } = new();
-        public EmotionalTone OverallSentiment { get; set; }
+        public Emotion OverallSentiment { get; set; }
         public string Summary { get; set; }
         public int MessageCount => Messages?.Count ?? 0;
     }
@@ -137,7 +135,7 @@ namespace DigitalTwin.Core.DTOs
         public string Content { get; set; }
         public DateTime Timestamp { get; set; }
         public bool IsUserMessage { get; set; }
-        public EmotionalTone EmotionalTone { get; set; }
+        public Emotion EmotionalTone { get; set; }
         public double? Confidence { get; set; }
     }
 
@@ -245,7 +243,7 @@ namespace DigitalTwin.Core.DTOs
         public Guid TwinId { get; set; }
         public Guid InteractionId { get; set; }
         public string Content { get; set; }
-        public EmotionalTone EmotionalTone { get; set; }
+        public Emotion EmotionalTone { get; set; }
         public double Confidence { get; set; }
         public TimeSpan ResponseTime { get; set; }
         public List<Guid> MemoryReferences { get; set; } = new();
@@ -298,7 +296,7 @@ namespace DigitalTwin.Core.DTOs
     public class LLMResponse
     {
         public string Content { get; set; }
-        public EmotionalTone EmotionalTone { get; set; }
+        public Emotion EmotionalTone { get; set; }
         public double Confidence { get; set; }
         public TimeSpan ResponseTime { get; set; }
         public int TokensUsed { get; set; }
@@ -472,8 +470,8 @@ namespace DigitalTwin.Core.DTOs
     /// </summary>
     public class EmotionalAnalysis
     {
-        public EmotionalTone PrimaryEmotion { get; set; }
-        public Dictionary<EmotionalTone, double> EmotionScores { get; set; } = new();
+        public Emotion PrimaryEmotion { get; set; }
+        public Dictionary<Emotion, double> EmotionScores { get; set; } = new();
         public double Intensity { get; set; }
         public double Confidence { get; set; }
         public string Sentiment { get; set; } // Positive, Negative, Neutral
@@ -496,7 +494,7 @@ namespace DigitalTwin.Core.DTOs
     /// </summary>
     public class SpeechEmotion
     {
-        public EmotionalTone Emotion { get; set; }
+        public Emotion Emotion { get; set; }
         public double Confidence { get; set; }
         public double ArousalLevel { get; set; }
         public double ValenceLevel { get; set; }

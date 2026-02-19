@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using DigitalTwin.Core.Enums;
 using DigitalTwin.Core.Interfaces;
 using Pgvector;
 
@@ -12,8 +13,8 @@ namespace DigitalTwin.Core.Entities
     {
         public Guid Id { get; set; } = Guid.NewGuid();
         public string UserId { get; set; }
-        public EmotionType EmotionType { get; set; }
-        public EmotionType PrimaryEmotion { get; set; }
+        public Emotion EmotionType { get; set; }
+        public Emotion PrimaryEmotion { get; set; }
         public double Intensity { get; set; }
         public string Context { get; set; }
         public string Trigger { get; set; }
@@ -21,7 +22,7 @@ namespace DigitalTwin.Core.Entities
         public DateTime Timestamp { get; set; }
         public DateTime CreatedAt { get; set; }
         public int ImportanceScore { get; set; }
-        public List<EmotionType> AssociatedEmotions { get; set; } = new();
+        public List<Emotion> AssociatedEmotions { get; set; } = new();
         public List<string> EmotionTags { get; set; } = new();
         public Dictionary<string, object> Metadata { get; set; } = new();
 
@@ -31,31 +32,7 @@ namespace DigitalTwin.Core.Entities
         /// <summary>
         /// Alias for EmotionType for backward compatibility
         /// </summary>
-        public EmotionType Emotion => EmotionType;
-    }
-
-    /// <summary>
-    /// Types of emotions detected
-    /// </summary>
-    [Obsolete("Use DigitalTwin.Core.Enums.Emotion enum with EmotionMapper instead.")]
-    public enum EmotionType
-    {
-        Happy,
-        Sad,
-        Angry,
-        Fearful,
-        Surprised,
-        Disgusted,
-        Neutral,
-        Excited,
-        Anxious,
-        Calm,
-        Frustrated,
-        Curious,
-        Fear,
-        Disgust,
-        Surprise,
-        Content
+        public Emotion Emotion => EmotionType;
     }
 
     /// <summary>
@@ -71,8 +48,8 @@ namespace DigitalTwin.Core.Entities
         public DateTime? EndedAt { get; set; }
         public DateTime? LastMessageAt { get; set; }
         public List<ConversationMessage> Messages { get; set; } = new();
-        public EmotionType DominantEmotion { get; set; }
-        public EmotionType CurrentEmotionalState { get; set; }
+        public Emotion DominantEmotion { get; set; }
+        public Emotion CurrentEmotionalState { get; set; }
         public int MessageCount { get; set; }
         public Dictionary<string, object> SessionContext { get; set; } = new();
         public Dictionary<string, object> ConversationContext { get; set; } = new();
@@ -88,7 +65,7 @@ namespace DigitalTwin.Core.Entities
         public string Role { get; set; } // "user" or "assistant"
         public string? Content { get; set; }
         public DateTime Timestamp { get; set; }
-        public EmotionType DetectedEmotion { get; set; }
+        public Emotion DetectedEmotion { get; set; }
 
         // Encryption at rest fields
         public byte[]? EncryptedContent { get; set; }
@@ -106,7 +83,7 @@ namespace DigitalTwin.Core.Entities
         public string Response { get; set; }
         public string ErrorMessage { get; set; }
         public bool Success { get; set; }
-        public EmotionType DetectedEmotion { get; set; }
+        public Emotion DetectedEmotion { get; set; }
         public double Confidence { get; set; }
         public double EmotionalIntensity { get; set; }
         public double PersonalizationLevel { get; set; }
@@ -136,8 +113,8 @@ namespace DigitalTwin.Core.Entities
     public class EmotionalTrend
     {
         public Guid UserId { get; set; }
-        public EmotionType Emotion { get; set; }
-        public EmotionType DominantEmotion { get; set; }
+        public Emotion Emotion { get; set; }
+        public Emotion DominantEmotion { get; set; }
         public double Frequency { get; set; }
         public double AverageIntensity { get; set; }
         public double EmotionalStability { get; set; }

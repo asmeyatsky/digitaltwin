@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using DigitalTwin.Core.DTOs;
+using DigitalTwin.Core.Enums;
 
 namespace DigitalTwin.Presentation.UI
 {
@@ -287,7 +288,7 @@ namespace DigitalTwin.Presentation.UI
             }
         }
 
-        private async Task UpdateEmotionalExpression(EmotionalState emotionalState)
+        private async Task UpdateEmotionalExpression(Emotion emotionalState)
         {
             try
             {
@@ -309,7 +310,7 @@ namespace DigitalTwin.Presentation.UI
                 }
 
                 // Show/hide emotional indicator
-                emotionalIndicator.SetActive(emotionalState != EmotionalState.Neutral);
+                emotionalIndicator.SetActive(emotionalState != Emotion.Neutral);
             }
             catch (Exception ex)
             {
@@ -317,30 +318,30 @@ namespace DigitalTwin.Presentation.UI
             }
         }
 
-        private Sprite GetEmotionalSprite(EmotionalState state)
+        private Sprite GetEmotionalSprite(Emotion state)
         {
             return state switch
             {
-                EmotionalState.Happy => emotionalSprites[0],
-                EmotionalState.Excited => emotionalSprites[1],
-                EmotionalState.Neutral => emotionalSprites[2],
-                EmotionalState.Concerned => emotionalSprites[3],
-                EmotionalState.Frustrated => emotionalSprites[4],
-                EmotionalState.Curious => emotionalSprites[5],
+                Emotion.Happy => emotionalSprites[0],
+                Emotion.Excited => emotionalSprites[1],
+                Emotion.Neutral => emotionalSprites[2],
+                Emotion.Anxious => emotionalSprites[3],
+                Emotion.Angry => emotionalSprites[4],
+                Emotion.Calm => emotionalSprites[5],
                 _ => emotionalSprites[2] // Default to neutral
             };
         }
 
-        private string GetEmotionalAnimationTrigger(EmotionalState state)
+        private string GetEmotionalAnimationTrigger(Emotion state)
         {
             return state switch
             {
-                EmotionalState.Happy => "Smile",
-                EmotionalState.Excited => "Excited",
-                EmotionalState.Neutral => "Neutral",
-                EmotionalState.Concerned => "Concerned",
-                EmotionalState.Frustrated => "Frustrated",
-                EmotionalState.Curious => "Curious",
+                Emotion.Happy => "Smile",
+                Emotion.Excited => "Excited",
+                Emotion.Neutral => "Neutral",
+                Emotion.Anxious => "Concerned",
+                Emotion.Angry => "Frustrated",
+                Emotion.Calm => "Curious",
                 _ => "Neutral"
             };
         }
@@ -728,7 +729,7 @@ namespace DigitalTwin.Presentation.UI
             }
 
             // Add emotional tone indicator
-            if (response.EmotionalTone != EmotionalTone.Neutral)
+            if (response.EmotionalTone != Emotion.Neutral)
             {
                 var color = GetEmotionalColor(response.EmotionalTone);
                 timestampText.color = color;
@@ -766,15 +767,16 @@ namespace DigitalTwin.Presentation.UI
             return null;
         }
 
-        private Color GetEmotionalColor(EmotionalTone tone)
+        private Color GetEmotionalColor(Emotion tone)
         {
             return tone switch
             {
-                EmotionalTone.Happy => Color.yellow,
-                EmotionalTone.Excited => Color.magenta,
-                EmotionalTone.Concerned => Color.orange,
-                EmotionalTone.Frustrated => Color.red,
-                EmotionalTone.Curious => Color.cyan,
+                Emotion.Happy => Color.yellow,
+                Emotion.Excited => Color.magenta,
+                Emotion.Anxious => Color.orange,
+                Emotion.Angry => Color.red,
+                Emotion.Sad => Color.blue,
+                Emotion.Calm => Color.cyan,
                 _ => Color.white
             };
         }

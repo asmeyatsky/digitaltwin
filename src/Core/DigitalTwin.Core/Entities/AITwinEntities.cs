@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using DigitalTwin.Core.Enums;
 
 namespace DigitalTwin.Core.Entities
 {
@@ -26,7 +27,7 @@ namespace DigitalTwin.Core.Entities
         public List<AITwinMemory> MemoryStore { get; set; } = new();
 
         public double ActivationLevel { get; set; }
-        public EmotionalState EmotionalState { get; set; }
+        public Emotion EmotionalState { get; set; }
     }
 
     /// <summary>
@@ -92,7 +93,7 @@ namespace DigitalTwin.Core.Entities
         public string Content { get; set; }
         public DateTime Timestamp { get; set; }
         public Dictionary<string, object> Context { get; set; } = new();
-        public EmotionalTone EmotionalTone { get; set; }
+        public Emotion EmotionalTone { get; set; }
         public AITwinInteractionResponse Response { get; set; }
     }
 
@@ -102,7 +103,7 @@ namespace DigitalTwin.Core.Entities
     public class AITwinInteractionResponse
     {
         public string Content { get; set; }
-        public EmotionalTone EmotionalTone { get; set; }
+        public Emotion EmotionalTone { get; set; }
         public double Confidence { get; set; }
         public DateTime Timestamp { get; set; }
     }
@@ -143,40 +144,6 @@ namespace DigitalTwin.Core.Entities
         Adaptive,   // Continuously learns and adapts
         Guided,     // Learns with human feedback
         Fixed       // Maintains fixed behavior
-    }
-
-    /// <summary>
-    /// Emotional state of AI Twin
-    /// </summary>
-    [Obsolete("Use DigitalTwin.Core.Enums.Emotion enum with EmotionMapper instead.")]
-    public enum EmotionalState
-    {
-        Neutral,
-        Happy,
-        Excited,
-        Concerned,
-        Frustrated,
-        Curious,
-        Calm,
-        Alert
-    }
-
-    /// <summary>
-    /// Emotional tone detected in messages
-    /// Maps external taxonomies (DeepFace 7 Ekman emotions, LLM strings)
-    /// to unified internal representation at service boundaries
-    /// </summary>
-    [Obsolete("Use DigitalTwin.Core.Enums.Emotion enum with EmotionMapper instead.")]
-    public enum EmotionalTone
-    {
-        Neutral,
-        Happy,
-        Excited,
-        Concerned,
-        Frustrated,
-        Curious,
-        Sad,
-        Calm
     }
 
     /// <summary>

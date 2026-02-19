@@ -67,7 +67,7 @@
 | W-2 | Orphaned `Building/Floor/Room/Equipment/Sensor` DbSets — never used by any service | ✅ FIXED — removed orphaned DbSets |
 | W-3 | `ConversationController` bypasses `IConversationService`, uses `DbContext` + raw HTTP directly | ⬜ DEFERRED — refactor requires broader changes |
 | W-4 | ~30+ uses of obsolete `EmotionType`/`EmotionalTone` enums — migration incomplete | ⬜ DEFERRED — large-scope enum migration |
-| W-5 | Duplicate `PasswordHasher` classes in `Core.Security` (instance) and `Infrastructure.Security` (static) | ⬜ DEFERRED — needs usage audit |
+| W-5 | Duplicate `PasswordHasher` classes in `Core.Security` (instance) and `Infrastructure.Security` (static) | ✅ FIXED — deleted unused Infrastructure.Security static duplicate; Core.Security instance version is the canonical one (DI-registered) |
 | W-6 | `ConversationMessage` and `ConversationMemory` entities have no DbSets | ✅ FIXED — added DbSets + model config |
 | W-7 | Biometric data collected on device (`biometric.ts`) is never synced to server API | ✅ FIXED — added syncBiometricData() |
 | W-8 | CORS policy doesn't allow `PATCH` method | ✅ FIXED — added PATCH to WithMethods |

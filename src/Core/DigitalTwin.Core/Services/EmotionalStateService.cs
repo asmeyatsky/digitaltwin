@@ -206,7 +206,7 @@ namespace DigitalTwin.Core.Services
                 {
                     return new EmotionalTrend
                     {
-                        DominantEmotion = EmotionType.Neutral,
+                        DominantEmotion = Emotion.Neutral,
                         EmotionalStability = 1.0,
                         TrendDirection = TrendDirection.Stable,
                         Confidence = 0.5
@@ -214,7 +214,7 @@ namespace DigitalTwin.Core.Services
                 }
 
                 // Analyze emotional patterns
-                var emotionCounts = new Dictionary<EmotionType, int>();
+                var emotionCounts = new Dictionary<Emotion, int>();
                 foreach (var memory in recentMemories)
                 {
                     emotionCounts[memory.PrimaryEmotion] = emotionCounts.GetValueOrDefault(memory.PrimaryEmotion, 0) + 1;
@@ -278,7 +278,7 @@ namespace DigitalTwin.Core.Services
             if (memories.Count < 5) return 0.5;
 
             // Group by emotion and calculate consistency
-            var emotionGroups = new Dictionary<EmotionType, List<EmotionalMemory>>();
+            var emotionGroups = new Dictionary<Emotion, List<EmotionalMemory>>();
             foreach (var memory in memories)
             {
                 if (!emotionGroups.ContainsKey(memory.PrimaryEmotion))
@@ -327,7 +327,7 @@ namespace DigitalTwin.Core.Services
             return (variance * 0.3 + timeConsistency * 0.7) / 2.0;
         }
 
-        private TrendDirection CalculateTrendDirection(List<EmotionalMemory> memories, EmotionType currentDominant)
+        private TrendDirection CalculateTrendDirection(List<EmotionalMemory> memories, Emotion currentDominant)
         {
             if (memories.Count < 10) return TrendDirection.InsufficientData;
 
@@ -353,7 +353,7 @@ namespace DigitalTwin.Core.Services
             return TrendDirection.Fluctuating;
         }
 
-        private EmotionType GetMostFrequentEmotion(List<EmotionalMemory> memories)
+        private Emotion GetMostFrequentEmotion(List<EmotionalMemory> memories)
         {
             var mostFrequent = memories
                 .GroupBy(m => m.PrimaryEmotion)
@@ -363,10 +363,10 @@ namespace DigitalTwin.Core.Services
             return mostFrequent;
         }
 
-        private bool IsImprovementTrend(EmotionType recent, EmotionType older)
+        private bool IsImprovementTrend(Emotion recent, Emotion older)
         {
-            var positiveEmotions = new List<EmotionType> { EmotionType.Happy, EmotionType.Excited, EmotionType.Content };
-            var negativeEmotions = new List<EmotionType> { EmotionType.Sad, EmotionType.Angry, EmotionType.Fear, EmotionType.Disgust };
+            var positiveEmotions = new List<Emotion> { Emotion.Happy, Emotion.Excited, Emotion.Calm };
+            var negativeEmotions = new List<Emotion> { Emotion.Sad, Emotion.Angry, Emotion.Anxious };
 
             var isRecentPositive = positiveEmotions.Contains(recent);
             var isOldPositive = positiveEmotions.Contains(older);
@@ -374,10 +374,10 @@ namespace DigitalTwin.Core.Services
             return isRecentPositive && !isOldPositive;
         }
 
-        private bool IsDeclineTrend(EmotionType recent, EmotionType older)
+        private bool IsDeclineTrend(Emotion recent, Emotion older)
         {
-            var positiveEmotions = new List<EmotionType> { EmotionType.Happy, EmotionType.Excited, EmotionType.Content };
-            var negativeEmotions = new List<EmotionType> { EmotionType.Sad, EmotionType.Angry, EmotionType.Fear, EmotionType.Disgust };
+            var positiveEmotions = new List<Emotion> { Emotion.Happy, Emotion.Excited, Emotion.Calm };
+            var negativeEmotions = new List<Emotion> { Emotion.Sad, Emotion.Angry, Emotion.Anxious };
 
             var isRecentNegative = negativeEmotions.Contains(recent);
             var isOldNegative = negativeEmotions.Contains(older);

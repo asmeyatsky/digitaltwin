@@ -75,7 +75,7 @@ namespace DigitalTwin.Core.Services
                     UserId = userId.ToString(),
                     StartedAt = DateTime.UtcNow,
                     IsActive = true,
-                    CurrentEmotionalState = EmotionType.Neutral,
+                    CurrentEmotionalState = Emotion.Neutral,
                     ConversationContext = new Dictionary<string, object>()
                 };
 
@@ -109,7 +109,7 @@ namespace DigitalTwin.Core.Services
                         Intensity = response.EmotionalIntensity,
                         CreatedAt = DateTime.UtcNow,
                         ImportanceScore = 5,
-                        AssociatedEmotions = new List<EmotionType> { response.DetectedEmotion },
+                        AssociatedEmotions = new List<Emotion> { response.DetectedEmotion },
                         EmotionTags = new List<string> { "conversation_start", "initial_message" }
                     };
 
@@ -162,7 +162,7 @@ namespace DigitalTwin.Core.Services
                 var textEmotion = await AnalyzeMessageEmotionAsync(message);
 
                 // Multi-modal emotion fusion using unified Emotion enum (AD-1)
-                var unifiedEmotion = EmotionMapper.FromEmotionType(textEmotion);
+                var unifiedEmotion = textEmotion;
                 var fusedEmotionLabel = EmotionMapper.ToExternalString(unifiedEmotion);
                 double fusedConfidence = 0.7;
 
@@ -273,7 +273,7 @@ namespace DigitalTwin.Core.Services
                     Intensity = fusedConfidence,
                     CreatedAt = DateTime.UtcNow,
                     ImportanceScore = CalculateMessageImportance(message, textEmotion),
-                    AssociatedEmotions = new List<EmotionType> { textEmotion },
+                    AssociatedEmotions = new List<Emotion> { textEmotion },
                     EmotionTags = ExtractEmotionTags(message, textEmotion)
                 };
 
@@ -336,6 +336,71 @@ namespace DigitalTwin.Core.Services
             }
         }
 
+        public async Task<ConversationResponse> ProcessMessageAsync(Guid userId, Guid conversationId, string message)
+        {
+            // Ensure a session exists; start one if needed, then process the message
+            var sessionJson = await _cache.GetStringAsync(SessionCacheKey(userId));
+            if (sessionJson == null)
+            {
+                // Auto-start a session so the message can be processed
+                await StartConversationAsync(userId);
+            }
+
+            return await ProcessMessageAsync(userId, message);
+        }
+
+        public async Task<ConversationHistoryResult> GetConversationHistoryAsync(Guid userId, Guid conversationId, int page = 1, int pageSize = 50)
+        {
+            try
+            {
+                _logger.LogInformation("Getting conversation history for user {UserId}, conversation {ConversationId}", userId, conversationId);
+
+                var allMemories = await _emotionalStateService.GetUserMemoriesAsync(userId, int.MaxValue);
+
+                var conversationMemories = allMemories
+                    .Where(m => m.EmotionTags != null && m.EmotionTags.Any(tag =>
+                        tag.Contains("conversation") || tag.Contains("message") || tag.Contains("support_request") || tag.Contains("gratitude")))
+                    .OrderBy(m => m.CreatedAt)
+                    .ToList();
+
+                var totalCount = conversationMemories.Count;
+                var paged = conversationMemories
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
+
+                var items = paged.Select(m => new ConversationHistoryItem
+                {
+                    Id = m.Id != Guid.Empty ? m.Id : Guid.NewGuid(),
+                    Content = m.Description ?? string.Empty,
+                    UserEmotion = m.PrimaryEmotion.ToString(),
+                    Timestamp = m.CreatedAt,
+                    MessageType = m.EmotionTags?.Contains("conversation_start") == true ? "conversation_start"
+                                : m.EmotionTags?.Contains("conversation_end") == true ? "conversation_end"
+                                : "user_message"
+                }).ToList();
+
+                return new ConversationHistoryResult
+                {
+                    Messages = items,
+                    TotalCount = totalCount,
+                    Page = page,
+                    PageSize = pageSize
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting conversation history for user {UserId}: {Error}", userId, ex.Message);
+                return new ConversationHistoryResult
+                {
+                    Messages = new List<ConversationHistoryItem>(),
+                    TotalCount = 0,
+                    Page = page,
+                    PageSize = pageSize
+                };
+            }
+        }
+
         public async Task<bool> EndConversationAsync(Guid userId)
         {
             try
@@ -358,7 +423,7 @@ namespace DigitalTwin.Core.Services
                         Intensity = 0.5,
                         CreatedAt = DateTime.UtcNow,
                         ImportanceScore = 3,
-                        AssociatedEmotions = new List<EmotionType> { session.CurrentEmotionalState },
+                        AssociatedEmotions = new List<Emotion> { session.CurrentEmotionalState },
                         EmotionTags = new List<string> { "conversation_end", "summary" }
                     };
 
@@ -441,7 +506,7 @@ namespace DigitalTwin.Core.Services
                 {
                     Success = true,
                     Response = greetingText,
-                    DetectedEmotion = EmotionType.Happy,
+                    DetectedEmotion = Emotion.Happy,
                     EmotionalIntensity = 0.7,
                     PersonalizationLevel = 0.5,
                     ResponseTime = DateTime.UtcNow
@@ -455,14 +520,14 @@ namespace DigitalTwin.Core.Services
                 {
                     Success = true,
                     Response = "Hello! I'm excited to talk with you today. How are you feeling?",
-                    DetectedEmotion = EmotionType.Happy,
+                    DetectedEmotion = Emotion.Happy,
                     EmotionalIntensity = 0.7,
                     ResponseTime = DateTime.UtcNow
                 };
             }
         }
 
-        private async Task<EmotionType> AnalyzeMessageEmotionAsync(string message)
+        private async Task<Emotion> AnalyzeMessageEmotionAsync(string message)
         {
             if (_httpClientFactory != null)
             {
@@ -478,7 +543,7 @@ namespace DigitalTwin.Core.Services
                         var result = await response.Content.ReadFromJsonAsync<NlpEmotionResult>();
                         if (result != null)
                         {
-                            return MapNlpEmotion(result.Emotion);
+                            return EmotionMapper.FromString(result.Emotion);
                         }
                     }
                 }
@@ -491,36 +556,23 @@ namespace DigitalTwin.Core.Services
             return AnalyzeMessageEmotion(message);
         }
 
-        private static EmotionType MapNlpEmotion(string emotion) => emotion.ToLower() switch
-        {
-            "happy" => EmotionType.Happy,
-            "sad" => EmotionType.Sad,
-            "angry" => EmotionType.Angry,
-            "anxious" => EmotionType.Fear,
-            "surprised" => EmotionType.Surprise,
-            "excited" => EmotionType.Happy,
-            "calm" => EmotionType.Neutral,
-            _ => EmotionType.Neutral
-        };
-
         private class NlpEmotionResult
         {
             public string Emotion { get; set; } = "neutral";
             public double Confidence { get; set; }
         }
 
-        private EmotionType AnalyzeMessageEmotion(string message)
+        private Emotion AnalyzeMessageEmotion(string message)
         {
             var messageLower = message.ToLower();
 
-            var emotionKeywords = new Dictionary<EmotionType, List<string>>
+            var emotionKeywords = new Dictionary<Emotion, List<string>>
             {
-                { EmotionType.Happy, new List<string> { "happy", "excited", "joy", "wonderful", "great", "amazing", "love", "fantastic" } },
-                { EmotionType.Sad, new List<string> { "sad", "depressed", "down", "unhappy", "terrible", "awful", "hate", "disappointed" } },
-                { EmotionType.Angry, new List<string> { "angry", "mad", "furious", "annoyed", "frustrated", "irritated", "upset", "rage" } },
-                { EmotionType.Fear, new List<string> { "scared", "afraid", "fearful", "anxious", "worried", "nervous", "panic", "terrified" } },
-                { EmotionType.Disgust, new List<string> { "disgusted", "gross", "awful", "terrible", "sick", "nasty", "revolting" } },
-                { EmotionType.Surprise, new List<string> { "surprised", "shocked", "amazed", "astonished", "wow", "incredible", "unbelievable" } }
+                { Emotion.Happy, new List<string> { "happy", "excited", "joy", "wonderful", "great", "amazing", "love", "fantastic" } },
+                { Emotion.Sad, new List<string> { "sad", "depressed", "down", "unhappy", "terrible", "awful", "hate", "disappointed" } },
+                { Emotion.Angry, new List<string> { "angry", "mad", "furious", "annoyed", "frustrated", "irritated", "upset", "rage" } },
+                { Emotion.Anxious, new List<string> { "scared", "afraid", "fearful", "anxious", "worried", "nervous", "panic", "terrified" } },
+                { Emotion.Surprised, new List<string> { "surprised", "shocked", "amazed", "astonished", "wow", "incredible", "unbelievable" } }
             };
 
             foreach (var emotion in emotionKeywords)
@@ -531,14 +583,14 @@ namespace DigitalTwin.Core.Services
                 }
             }
 
-            return EmotionType.Neutral;
+            return Emotion.Neutral;
         }
 
-        private int CalculateMessageImportance(string message, EmotionType emotion)
+        private int CalculateMessageImportance(string message, Emotion emotion)
         {
             var importance = 3;
 
-            if (emotion != EmotionType.Neutral)
+            if (emotion != Emotion.Neutral)
                 importance += 2;
 
             if (message.Length > 50)
@@ -551,7 +603,7 @@ namespace DigitalTwin.Core.Services
             return Math.Min(10, importance);
         }
 
-        private List<string> ExtractEmotionTags(string message, EmotionType emotion)
+        private List<string> ExtractEmotionTags(string message, Emotion emotion)
         {
             var tags = new List<string> { emotion.ToString().ToLower() };
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using DigitalTwin.Core.DTOs;
+using DigitalTwin.Core.Enums;
 using DigitalTwin.Core.Interfaces;
 using DigitalTwin.Core.Entities;
 
@@ -58,7 +59,7 @@ namespace DigitalTwin.Core.Services
                 ActivationLevel = 0.1, // Start with low activation
                 LastInteraction = DateTime.UtcNow,
                 MemoryStore = new List<AITwinMemory>(),
-                EmotionalState = EmotionalState.Neutral
+                EmotionalState = Emotion.Neutral
             };
 
             // Initialize with building data
@@ -87,7 +88,7 @@ namespace DigitalTwin.Core.Services
                 Content = message.Content,
                 Timestamp = DateTime.UtcNow,
                 Context = message.Context,
-                EmotionalTone = AnalyzeEmotionalTone(message.Content)
+                EmotionalTone = AnalyzeEmotionFromContent(message.Content)
             };
 
             profile.InteractionHistory.Add(interaction);
@@ -103,7 +104,7 @@ namespace DigitalTwin.Core.Services
             await LearnFromInteraction(profile, interaction, response);
 
             // Update emotional state
-            profile.EmotionalState = UpdateEmotionalState(profile.EmotionalState, interaction);
+            profile.EmotionalState = UpdateEmotionalStateFromInteraction(profile.EmotionalState, interaction);
 
             // Save updated profile
             await _aiTwinRepository.UpdateAsync(profile);
@@ -474,40 +475,35 @@ Always respond in a way that reflects your learned personality and the current e
             return baseTemperature + temperatureAdjustment;
         }
 
-        private EmotionalTone AnalyzeEmotionalTone(string content)
+        private Emotion AnalyzeEmotionFromContent(string content)
         {
             var lowerContent = content.ToLower();
-            
+
             if (lowerContent.Contains("thank") || lowerContent.Contains("great") || lowerContent.Contains("awesome"))
-                return EmotionalTone.Happy;
+                return Emotion.Happy;
             if (lowerContent.Contains("concern") || lowerContent.Contains("worry") || lowerContent.Contains("problem"))
-                return EmotionalTone.Concerned;
+                return Emotion.Anxious;
             if (lowerContent.Contains("frustrat") || lowerContent.Contains("angry") || lowerContent.Contains("annoy"))
-                return EmotionalTone.Frustrated;
+                return Emotion.Angry;
             if (lowerContent.Contains("excited") || lowerContent.Contains("amazing"))
-                return EmotionalTone.Excited;
-            
-            return EmotionalTone.Neutral;
+                return Emotion.Excited;
+
+            return Emotion.Neutral;
         }
 
-        private EmotionalState UpdateEmotionalState(EmotionalState currentState, AITwinInteraction interaction)
+        private Emotion UpdateEmotionalStateFromInteraction(Emotion currentState, AITwinInteraction interaction)
         {
             var toneFromUser = interaction.EmotionalTone;
-            
+
             // Simple emotional state update based on user's emotional tone
-            switch (toneFromUser)
+            return toneFromUser switch
             {
-                case EmotionalTone.Happy:
-                    return EmotionalState.Happy;
-                case EmotionalTone.Concerned:
-                    return EmotionalState.Concerned;
-                case EmotionalTone.Frustrated:
-                    return EmotionalState.Frustrated;
-                case EmotionalTone.Excited:
-                    return EmotionalState.Excited;
-                default:
-                    return currentState; // No change
-            }
+                Emotion.Happy => Emotion.Happy,
+                Emotion.Anxious => Emotion.Anxious,
+                Emotion.Angry => Emotion.Angry,
+                Emotion.Excited => Emotion.Excited,
+                _ => currentState // No change
+            };
         }
 
         private double CalculateMemoryImportance(AITwinInteraction interaction, AITwinResponse response)
@@ -523,7 +519,7 @@ Always respond in a way that reflects your learned personality and the current e
                 importance += 0.2;
 
             // Increase importance for emotional content
-            if (interaction.EmotionalTone != EmotionalTone.Neutral)
+            if (interaction.EmotionalTone != Emotion.Neutral)
                 importance += 0.1;
 
             return Math.Min(importance, 1.0);
@@ -566,15 +562,17 @@ Always respond in a way that reflects your learned personality and the current e
             return (userValence + twinValence) / 2.0;
         }
 
-        private double GetEmotionalValence(EmotionalTone tone)
+        private double GetEmotionalValence(Emotion tone)
         {
             return tone switch
             {
-                EmotionalTone.Happy => 0.8,
-                EmotionalTone.Excited => 0.9,
-                EmotionalTone.Neutral => 0.5,
-                EmotionalTone.Concerned => 0.3,
-                EmotionalTone.Frustrated => 0.2,
+                Emotion.Happy => 0.8,
+                Emotion.Excited => 0.9,
+                Emotion.Neutral => 0.5,
+                Emotion.Anxious => 0.3,
+                Emotion.Angry => 0.2,
+                Emotion.Sad => 0.2,
+                Emotion.Calm => 0.6,
                 _ => 0.5
             };
         }
@@ -756,8 +754,8 @@ Always respond in a way that reflects your learned personality and the current e
                 : 0;
 
             // Calculate positive vs negative emotion ratio
-            var positiveEmotions = new[] { EmotionalTone.Happy, EmotionalTone.Excited };
-            var negativeEmotions = new[] { EmotionalTone.Frustrated, EmotionalTone.Concerned };
+            var positiveEmotions = new[] { Emotion.Happy, Emotion.Excited };
+            var negativeEmotions = new[] { Emotion.Angry, Emotion.Anxious, Emotion.Sad };
 
             var positiveCount = patterns.Count(p => positiveEmotions.Contains(p.EmotionalTone));
             var negativeCount = patterns.Count(p => negativeEmotions.Contains(p.EmotionalTone));
@@ -943,8 +941,8 @@ Always respond in a way that reflects your learned personality and the current e
             {
                 FeedbackSignals = ExtractFeedbackSignals(recentInteractions),
                 SuccessfulInteractions = recentInteractions
-                    .Where(i => i.EmotionalTone == EmotionalTone.Happy ||
-                               i.EmotionalTone == EmotionalTone.Excited)
+                    .Where(i => i.EmotionalTone == Emotion.Happy ||
+                               i.EmotionalTone == Emotion.Excited)
                     .ToList()
             };
 
@@ -1233,7 +1231,7 @@ Always respond in a way that reflects your learned personality and the current e
                         LastMessageTime = interaction.Timestamp,
                         Messages = new List<AITwinConversationMessage>(),
                         Topics = new List<string>(),
-                        OverallSentiment = EmotionalTone.Neutral
+                        OverallSentiment = Emotion.Neutral
                     };
                     conversations.Add(currentConversation);
                 }
@@ -1397,7 +1395,7 @@ Always respond in a way that reflects your learned personality and the current e
 
             // Analyze positive feedback (thanks, great, awesome)
             var positiveInteractions = interactions.Where(i =>
-                i.EmotionalTone == EmotionalTone.Happy ||
+                i.EmotionalTone == Emotion.Happy ||
                 i.Content?.ToLower().Contains("thank") == true);
 
             if (positiveInteractions.Count() > interactions.Count * 0.3)
@@ -1411,7 +1409,7 @@ Always respond in a way that reflects your learned personality and the current e
 
             // Analyze frustration signals
             var frustratedInteractions = interactions.Where(i =>
-                i.EmotionalTone == EmotionalTone.Frustrated);
+                i.EmotionalTone == Emotion.Angry);
 
             if (frustratedInteractions.Count() > interactions.Count * 0.2)
             {
@@ -1559,9 +1557,9 @@ Always respond in a way that reflects your learned personality and the current e
             return topics;
         }
 
-        private EmotionalTone CalculateOverallSentiment(List<AITwinConversationMessage> messages)
+        private Emotion CalculateOverallSentiment(List<AITwinConversationMessage> messages)
         {
-            if (!messages.Any()) return EmotionalTone.Neutral;
+            if (!messages.Any()) return Emotion.Neutral;
 
             var toneCounts = messages
                 .GroupBy(m => m.EmotionalTone)
@@ -1871,7 +1869,7 @@ Always respond in a way that reflects your learned personality and the current e
 
             // Calculate satisfaction score based on positive emotional tones
             var positiveInteractions = allInteractions.Count(i =>
-                i.EmotionalTone == EmotionalTone.Happy || i.EmotionalTone == EmotionalTone.Excited);
+                i.EmotionalTone == Emotion.Happy || i.EmotionalTone == Emotion.Excited);
             var satisfactionScore = allInteractions.Count > 0
                 ? (double)positiveInteractions / allInteractions.Count * 100
                 : 50.0;
@@ -1931,7 +1929,7 @@ Always respond in a way that reflects your learned personality and the current e
             profile.MemoryStore.Clear();
             profile.InteractionHistory.Clear();
             profile.ActivationLevel = 0.1;
-            profile.EmotionalState = EmotionalState.Neutral;
+            profile.EmotionalState = Emotion.Neutral;
             profile.PersonalityTraits = InitializePersonalityTraits(null);
             profile.LastInteraction = DateTime.UtcNow;
 

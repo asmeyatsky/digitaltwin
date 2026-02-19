@@ -10,6 +10,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using DigitalTwin.Core.DTOs;
 using DigitalTwin.Core.Entities;
+using DigitalTwin.Core.Enums;
 using DigitalTwin.Core.Interfaces;
 
 namespace DigitalTwin.Infrastructure.Services
@@ -55,17 +56,17 @@ namespace DigitalTwin.Infrastructure.Services
             try
             {
                 var lowerText = text.ToLower();
-                var emotionScores = new Dictionary<EmotionalTone, double>();
+                var emotionScores = new Dictionary<Emotion, double>();
 
                 // Keyword-based emotion detection
-                var emotionKeywords = new Dictionary<EmotionalTone, string[]>
+                var emotionKeywords = new Dictionary<Emotion, string[]>
                 {
-                    [EmotionalTone.Happy] = new[] { "happy", "great", "wonderful", "excellent", "fantastic", "amazing", "love", "joy", "pleased", "delighted", "glad", "excited", "thrilled" },
-                    [EmotionalTone.Excited] = new[] { "excited", "wow", "awesome", "incredible", "can't wait", "amazing", "thrilling", "enthusiastic" },
-                    [EmotionalTone.Concerned] = new[] { "worried", "concerned", "anxious", "nervous", "uneasy", "troubled", "afraid", "scared" },
-                    [EmotionalTone.Frustrated] = new[] { "frustrated", "angry", "annoyed", "irritated", "upset", "mad", "furious", "hate" },
-                    [EmotionalTone.Curious] = new[] { "curious", "wondering", "interested", "intrigued", "question", "what", "how", "why" },
-                    [EmotionalTone.Neutral] = new[] { "okay", "fine", "alright", "normal", "usual" }
+                    [Emotion.Happy] = new[] { "happy", "great", "wonderful", "excellent", "fantastic", "amazing", "love", "joy", "pleased", "delighted", "glad", "excited", "thrilled" },
+                    [Emotion.Excited] = new[] { "excited", "wow", "awesome", "incredible", "can't wait", "amazing", "thrilling", "enthusiastic" },
+                    [Emotion.Anxious] = new[] { "worried", "concerned", "anxious", "nervous", "uneasy", "troubled", "afraid", "scared" },
+                    [Emotion.Angry] = new[] { "frustrated", "angry", "annoyed", "irritated", "upset", "mad", "furious", "hate" },
+                    [Emotion.Calm] = new[] { "curious", "wondering", "interested", "intrigued", "question", "what", "how", "why" },
+                    [Emotion.Neutral] = new[] { "okay", "fine", "alright", "normal", "usual" }
                 };
 
                 // Calculate scores for each emotion
@@ -81,7 +82,7 @@ namespace DigitalTwin.Infrastructure.Services
                 }
 
                 // Find primary emotion
-                var primaryEmotion = EmotionalTone.Neutral;
+                var primaryEmotion = Emotion.Neutral;
                 var maxScore = 0.0;
                 foreach (var score in emotionScores)
                 {
@@ -95,8 +96,8 @@ namespace DigitalTwin.Infrastructure.Services
                 // If no strong emotion detected, default to neutral
                 if (maxScore < 0.1)
                 {
-                    primaryEmotion = EmotionalTone.Neutral;
-                    emotionScores[EmotionalTone.Neutral] = 0.8;
+                    primaryEmotion = Emotion.Neutral;
+                    emotionScores[Emotion.Neutral] = 0.8;
                 }
 
                 // Calculate sentiment
@@ -208,7 +209,7 @@ namespace DigitalTwin.Infrastructure.Services
 
             return new SpeechEmotion
             {
-                Emotion = EmotionalTone.Neutral,
+                Emotion = Emotion.Neutral,
                 Confidence = 0.5,
                 ArousalLevel = 0.5,
                 ValenceLevel = 0.5,
@@ -250,12 +251,12 @@ namespace DigitalTwin.Infrastructure.Services
 
                     if (result != null)
                     {
-                        // Map DeepFace emotions to our EmotionalTone enum
-                        var emotionScores = MapToEmotionalTones(result.EmotionScores);
+                        // Map DeepFace emotions to our canonical Emotion enum
+                        var emotionScores = MapToEmotions(result.EmotionScores);
 
                         return new EmotionalAnalysis
                         {
-                            PrimaryEmotion = MapStringToEmotionalTone(result.PrimaryEmotion),
+                            PrimaryEmotion = MapStringToEmotion(result.PrimaryEmotion),
                             EmotionScores = emotionScores,
                             Intensity = result.Intensity,
                             Confidence = result.Confidence,
@@ -294,10 +295,10 @@ namespace DigitalTwin.Infrastructure.Services
         {
             return new EmotionalAnalysis
             {
-                PrimaryEmotion = EmotionalTone.Neutral,
-                EmotionScores = new Dictionary<EmotionalTone, double>
+                PrimaryEmotion = Emotion.Neutral,
+                EmotionScores = new Dictionary<Emotion, double>
                 {
-                    [EmotionalTone.Neutral] = 1.0
+                    [Emotion.Neutral] = 1.0
                 },
                 Intensity = 0.5,
                 Confidence = 0.8,
@@ -306,10 +307,10 @@ namespace DigitalTwin.Infrastructure.Services
             };
         }
 
-        private (string sentiment, double score) CalculateSentiment(Dictionary<EmotionalTone, double> emotions)
+        private (string sentiment, double score) CalculateSentiment(Dictionary<Emotion, double> emotions)
         {
-            var positiveEmotions = new[] { EmotionalTone.Happy, EmotionalTone.Excited };
-            var negativeEmotions = new[] { EmotionalTone.Frustrated, EmotionalTone.Concerned };
+            var positiveEmotions = new[] { Emotion.Happy, Emotion.Excited };
+            var negativeEmotions = new[] { Emotion.Angry, Emotion.Anxious, Emotion.Sad };
 
             var positiveScore = 0.0;
             var negativeScore = 0.0;
@@ -322,7 +323,7 @@ namespace DigitalTwin.Infrastructure.Services
                     negativeScore += emotion.Value;
             }
 
-            var total = positiveScore + negativeScore + emotions.GetValueOrDefault(EmotionalTone.Neutral, 0);
+            var total = positiveScore + negativeScore + emotions.GetValueOrDefault(Emotion.Neutral, 0);
             if (total == 0)
                 return ("Neutral", 0.5);
 
@@ -336,19 +337,19 @@ namespace DigitalTwin.Infrastructure.Services
                 return ("Neutral", sentimentScore);
         }
 
-        private Dictionary<EmotionalTone, double> MapToEmotionalTones(Dictionary<string, double> scores)
+        private Dictionary<Emotion, double> MapToEmotions(Dictionary<string, double> scores)
         {
-            var result = new Dictionary<EmotionalTone, double>();
+            var result = new Dictionary<Emotion, double>();
 
-            var mapping = new Dictionary<string, EmotionalTone>
+            var mapping = new Dictionary<string, Emotion>
             {
-                ["happy"] = EmotionalTone.Happy,
-                ["surprise"] = EmotionalTone.Excited,
-                ["angry"] = EmotionalTone.Frustrated,
-                ["disgust"] = EmotionalTone.Frustrated,
-                ["fear"] = EmotionalTone.Concerned,
-                ["sad"] = EmotionalTone.Concerned,
-                ["neutral"] = EmotionalTone.Neutral
+                ["happy"] = Emotion.Happy,
+                ["surprise"] = Emotion.Surprised,
+                ["angry"] = Emotion.Angry,
+                ["disgust"] = Emotion.Angry,
+                ["fear"] = Emotion.Anxious,
+                ["sad"] = Emotion.Sad,
+                ["neutral"] = Emotion.Neutral
             };
 
             foreach (var score in scores)
@@ -365,19 +366,9 @@ namespace DigitalTwin.Infrastructure.Services
             return result;
         }
 
-        private EmotionalTone MapStringToEmotionalTone(string emotion)
+        private Emotion MapStringToEmotion(string emotion)
         {
-            return emotion?.ToLower() switch
-            {
-                "happy" => EmotionalTone.Happy,
-                "surprise" => EmotionalTone.Excited,
-                "angry" => EmotionalTone.Frustrated,
-                "disgust" => EmotionalTone.Frustrated,
-                "fear" => EmotionalTone.Concerned,
-                "sad" => EmotionalTone.Concerned,
-                "neutral" => EmotionalTone.Neutral,
-                _ => EmotionalTone.Neutral
-            };
+            return EmotionMapper.FromString(emotion ?? "neutral");
         }
     }
 
