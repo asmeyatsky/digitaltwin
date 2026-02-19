@@ -61,20 +61,11 @@ export default function ProfileScreen() {
     }
   };
 
-  const initials = user?.displayName
-    ? user.displayName
-        .split(" ")
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase()
+  const initials = user?.username
+    ? user.username
         .slice(0, 2)
+        .toUpperCase()
     : "DT";
-
-  const tierLabels: Record<string, string> = {
-    free: "Free Plan",
-    premium: "Premium",
-    enterprise: "Enterprise",
-  };
 
   return (
     <SafeAreaView className="flex-1 bg-companion-bg">
@@ -85,33 +76,21 @@ export default function ProfileScreen() {
         {/* Profile Card */}
         <View className="bg-white rounded-3xl p-6 border border-warmgray-100 items-center mb-6">
           <AvatarView
-            avatarUrl={user?.avatarUrl}
             emotion={currentEmotion?.primary}
             size={88}
             initials={initials}
           />
 
           <Text className="text-xl font-bold text-warmgray-800 mt-4">
-            {user?.displayName ?? "Digital Twin User"}
-          </Text>
-          <Text className="text-sm text-warmgray-400 mt-1">
-            {user?.email ?? "user@example.com"}
+            {user?.username ?? "Digital Twin User"}
           </Text>
 
-          <View className="bg-primary-50 rounded-full px-3 py-1 mt-3">
-            <Text className="text-xs font-semibold text-primary-600">
-              {tierLabels[user?.subscriptionTier ?? "free"]}
-            </Text>
-          </View>
-
-          {user?.createdAt && (
-            <Text className="text-xs text-warmgray-300 mt-3">
-              Member since{" "}
-              {new Date(user.createdAt).toLocaleDateString(undefined, {
-                month: "long",
-                year: "numeric",
-              })}
-            </Text>
+          {user?.roles && user.roles.length > 0 && (
+            <View className="bg-primary-50 rounded-full px-3 py-1 mt-3">
+              <Text className="text-xs font-semibold text-primary-600">
+                {user.roles.join(", ")}
+              </Text>
+            </View>
           )}
         </View>
 

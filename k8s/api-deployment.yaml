@@ -42,14 +42,19 @@ spec:
           value: "DigitalTwin"
         - name: JwtConfiguration__Audience
           value: "DigitalTwin"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: digitaltwin-secrets
+              key: redis-password
         - name: Redis__ConnectionString
-          value: "redis:6379"
+          value: "digitaltwin-redis-service:6379,password=$(REDIS_PASSWORD)"
         - name: RabbitMQ__ConnectionString
           valueFrom:
             secretKeyRef:
               name: digitaltwin-secrets
               key: rabbitmq-connection
-        - name: DeepFace__BaseUrl
+        - name: Services__DeepFace__BaseUrl
           value: "http://digitaltwin-deepface-service:8001"
         - name: Services__LLM__BaseUrl
           value: "http://digitaltwin-llm-service:8004"

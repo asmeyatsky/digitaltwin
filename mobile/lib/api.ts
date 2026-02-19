@@ -14,6 +14,8 @@ export interface ApiResponse<T> {
   errors?: string[];
 }
 
+// --- Auth DTOs (match server AuthController.cs) ---
+
 export interface AuthTokens {
   accessToken: string;
   refreshToken: string;
@@ -22,34 +24,115 @@ export interface AuthTokens {
 
 export interface UserProfile {
   id: string;
-  email: string;
-  displayName: string;
-  avatarUrl?: string;
-  createdAt: string;
-  subscriptionTier: "free" | "premium" | "enterprise";
+  username: string;
+  roles: string[];
 }
 
 export interface LoginRequest {
-  email: string;
-  password: string;
+  Username: string;
+  Password: string;
 }
 
 export interface RegisterRequest {
-  email: string;
-  password: string;
-  displayName: string;
+  Username: string;
+  Email: string;
+  Password: string;
+  FirstName: string;
+  LastName: string;
 }
 
-export interface Conversation {
-  id: string;
-  userId: string;
-  title: string;
-  createdAt: string;
-  updatedAt: string;
-  messageCount: number;
-  lastEmotion?: string;
+/** Raw shape returned by POST /api/auth/login */
+interface LoginResponseRaw {
+  Success: boolean;
+  Message?: string;
+  Token?: string;
+  RefreshToken?: string;
+  ExpiresIn: number;
+  User?: {
+    UserId: string;
+    Username: string;
+    Roles: string[];
+  };
 }
 
+/** Raw shape returned by POST /api/auth/register */
+interface RegisterResponseRaw {
+  Success: boolean;
+  Message?: string;
+  Token?: string;
+  RefreshToken?: string;
+  User?: {
+    UserId: string;
+    Username: string;
+    Roles: string[];
+  };
+  Errors?: string[];
+}
+
+/** Raw shape returned by POST /api/auth/refresh */
+interface TokenRefreshResponseRaw {
+  Success: boolean;
+  Message?: string;
+  Token?: string;
+  RefreshToken?: string;
+  ExpiresIn: number;
+}
+
+// --- Conversation DTOs (match server ConversationController.cs) ---
+
+export interface ConversationStartResponse {
+  SessionId: string;
+  Response: string;
+  EmotionalTone: string;
+  Timestamp: string;
+}
+
+export interface ConversationMessageRequest {
+  ConversationId: string;
+  Message: string;
+}
+
+export interface ConversationMessageResponse {
+  Response: string;
+  DetectedEmotion: string;
+  AIEmotionalTone: string;
+  ResponseTime: string;
+  ConversationId: string;
+}
+
+export interface ConversationMessage {
+  Id: string;
+  Content: string;
+  Response?: string;
+  UserEmotion: string;
+  AIEmotion?: string;
+  Timestamp: string;
+  MessageType: string;
+}
+
+export interface ConversationHistoryResponse {
+  Messages: ConversationMessage[];
+  TotalCount: number;
+  Page: number;
+  PageSize: number;
+}
+
+export interface ConversationEndRequest {
+  ConversationId: string;
+  SessionDuration?: string; // TimeSpan serialised as string
+}
+
+// --- Legacy types kept for other parts of the app ---
+
+export interface EmotionResult {
+  primary: string;
+  confidence: number;
+  secondary?: string;
+  valence: number; // -1 to 1
+  arousal: number; // 0 to 1
+}
+
+/** @deprecated Use ConversationMessage instead */
 export interface Message {
   id: string;
   conversationId: string;
@@ -60,24 +143,28 @@ export interface Message {
   audioUrl?: string;
 }
 
-export interface EmotionResult {
-  primary: string;
-  confidence: number;
-  secondary?: string;
-  valence: number; // -1 to 1
-  arousal: number; // 0 to 1
+/** @deprecated Use ConversationStartResponse instead */
+export interface Conversation {
+  id: string;
+  userId: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+  lastEmotion?: string;
 }
 
 export interface SendMessageRequest {
-  conversationId: string;
-  content: string;
-  audioBase64?: string;
+  ConversationId: string;
+  Message: string;
 }
 
 export interface SendMessageResponse {
-  userMessage: Message;
-  assistantMessage: Message;
-  emotion: EmotionResult;
+  Response: string;
+  DetectedEmotion: string;
+  AIEmotionalTone: string;
+  ResponseTime: string;
+  ConversationId: string;
 }
 
 export interface EmotionInsights {
@@ -206,21 +293,26 @@ async function request<T>(
 }
 
 async function silentRefresh(): Promise<boolean> {
-  const refreshToken = useAuthStore.getState().refreshToken;
-  if (!refreshToken) return false;
+  const store = useAuthStore.getState();
+  const currentToken = store.token;
+  const currentRefreshToken = store.refreshToken;
+  if (!currentToken || !currentRefreshToken) return false;
 
   try {
     const res = await fetch(`${API_BASE}/api/auth/refresh`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken }),
+      body: JSON.stringify({
+        Token: currentToken,
+        RefreshToken: currentRefreshToken,
+      }),
     });
 
     if (!res.ok) return false;
 
-    const body = (await res.json()) as ApiResponse<AuthTokens>;
-    if (body.success) {
-      useAuthStore.getState().setTokens(body.data.accessToken, body.data.refreshToken);
+    const body = (await res.json()) as TokenRefreshResponseRaw;
+    if (body.Success && body.Token && body.RefreshToken) {
+      useAuthStore.getState().setTokens(body.Token, body.RefreshToken);
       return true;
     }
     return false;
@@ -312,81 +404,176 @@ async function requestMultipart<T>(
 // Auth API
 // ---------------------------------------------------------------------------
 
+/**
+ * Login — sends {Username, Password} and maps the server response
+ * (LoginResponse with PascalCase fields) into the mobile AuthTokens + UserProfile shape.
+ */
 export async function login(
-  email: string,
+  username: string,
   password: string
 ): Promise<ApiResponse<AuthTokens & { user: UserProfile }>> {
-  return request<AuthTokens & { user: UserProfile }>("/api/auth/login", {
+  const res = await fetch(`${API_BASE}/api/auth/login`, {
     method: "POST",
-    body: JSON.stringify({ email, password } satisfies LoginRequest),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ Username: username, Password: password } satisfies LoginRequest),
   });
+
+  const raw: LoginResponseRaw = await res.json();
+
+  if (!res.ok || !raw.Success) {
+    throw new Error(raw.Message ?? `Login failed with status ${res.status}`);
+  }
+
+  return {
+    success: true,
+    data: {
+      accessToken: raw.Token!,
+      refreshToken: raw.RefreshToken!,
+      expiresIn: raw.ExpiresIn,
+      user: {
+        id: raw.User!.UserId,
+        username: raw.User!.Username,
+        roles: raw.User!.Roles,
+      },
+    },
+  };
 }
 
+/**
+ * Register — sends {Username, Email, Password, FirstName, LastName}
+ * and maps the server RegisterResponse into mobile types.
+ */
 export async function register(
-  email: string,
-  password: string,
-  displayName: string
+  req: RegisterRequest
 ): Promise<ApiResponse<AuthTokens & { user: UserProfile }>> {
-  return request<AuthTokens & { user: UserProfile }>("/api/auth/register", {
+  const res = await fetch(`${API_BASE}/api/auth/register`, {
     method: "POST",
-    body: JSON.stringify({ email, password, displayName } satisfies RegisterRequest),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
   });
+
+  const raw: RegisterResponseRaw = await res.json();
+
+  if (!res.ok || !raw.Success) {
+    const err: ApiResponse<never> = {
+      success: false,
+      data: undefined as never,
+      message: raw.Message ?? `Registration failed with status ${res.status}`,
+      errors: raw.Errors,
+    };
+    throw Object.assign(new Error(err.message!), { response: err });
+  }
+
+  return {
+    success: true,
+    data: {
+      accessToken: raw.Token!,
+      refreshToken: raw.RefreshToken!,
+      expiresIn: 3600,
+      user: {
+        id: raw.User!.UserId,
+        username: raw.User!.Username,
+        roles: raw.User!.Roles,
+      },
+    },
+  };
 }
 
+/**
+ * Refresh token — sends {Token, RefreshToken} per server's TokenRefreshRequest.
+ */
 export async function refreshToken(
-  token: string
+  token: string,
+  refresh: string
 ): Promise<ApiResponse<AuthTokens>> {
-  return request<AuthTokens>("/api/auth/refresh", {
+  const res = await fetch(`${API_BASE}/api/auth/refresh`, {
     method: "POST",
-    body: JSON.stringify({ refreshToken: token }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ Token: token, RefreshToken: refresh }),
   });
-}
 
-export async function getProfile(): Promise<ApiResponse<UserProfile>> {
-  return request<UserProfile>("/api/user/profile");
-}
+  const raw: TokenRefreshResponseRaw = await res.json();
 
-export async function updateProfile(
-  data: Partial<Pick<UserProfile, "displayName" | "avatarUrl">>
-): Promise<ApiResponse<UserProfile>> {
-  return request<UserProfile>("/api/user/profile", {
-    method: "PATCH",
-    body: JSON.stringify(data),
-  });
+  if (!res.ok || !raw.Success) {
+    throw new Error(raw.Message ?? `Token refresh failed with status ${res.status}`);
+  }
+
+  return {
+    success: true,
+    data: {
+      accessToken: raw.Token!,
+      refreshToken: raw.RefreshToken!,
+      expiresIn: raw.ExpiresIn,
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
 // Conversation API
 // ---------------------------------------------------------------------------
 
-export async function startConversation(): Promise<ApiResponse<Conversation>> {
-  return request<Conversation>("/api/conversation/start", { method: "POST" });
-}
-
-export async function listConversations(): Promise<ApiResponse<Conversation[]>> {
-  return request<Conversation[]>("/api/conversation/list");
-}
-
-export async function getConversationHistory(
-  conversationId: string
-): Promise<ApiResponse<Message[]>> {
-  return request<Message[]>(`/api/conversation/history/${conversationId}`);
-}
-
-export async function sendMessage(
-  payload: SendMessageRequest
-): Promise<ApiResponse<SendMessageResponse>> {
-  return request<SendMessageResponse>("/api/conversation/message", {
+/**
+ * Start a new conversation session.
+ * Server requires { Message } in the body (ConversationStartRequest).
+ * Response is wrapped in ApiResponse<ConversationStartResponse>.
+ */
+export async function startConversation(
+  message: string
+): Promise<ApiResponse<ConversationStartResponse>> {
+  return request<ConversationStartResponse>("/api/conversation/start", {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ Message: message }),
   });
 }
 
-export async function deleteConversation(
-  conversationId: string
+/**
+ * Send a message within an existing conversation.
+ * Server expects { ConversationId, Message } (ConversationMessageRequest).
+ * Response is wrapped in ApiResponse<ConversationMessageResponse>.
+ */
+export async function sendMessage(
+  conversationId: string,
+  message: string
+): Promise<ApiResponse<ConversationMessageResponse>> {
+  return request<ConversationMessageResponse>("/api/conversation/message", {
+    method: "POST",
+    body: JSON.stringify({
+      ConversationId: conversationId,
+      Message: message,
+    } satisfies SendMessageRequest),
+  });
+}
+
+/**
+ * Get conversation history with pagination.
+ * Server endpoint: GET /api/conversation/history/{conversationId}?page=&pageSize=
+ * Response is wrapped in ApiResponse<ConversationHistoryResponse>.
+ */
+export async function getConversationHistory(
+  conversationId: string,
+  page: number = 1,
+  pageSize: number = 50
+): Promise<ApiResponse<ConversationHistoryResponse>> {
+  return request<ConversationHistoryResponse>(
+    `/api/conversation/history/${conversationId}?page=${page}&pageSize=${pageSize}`
+  );
+}
+
+/**
+ * End a conversation session.
+ * Server endpoint: POST /api/conversation/end
+ * There is no DELETE endpoint on the server; use this to close a session.
+ */
+export async function endConversation(
+  conversationId: string,
+  sessionDuration?: string
 ): Promise<ApiResponse<void>> {
-  return request<void>(`/api/conversation/${conversationId}`, {
-    method: "DELETE",
+  return request<void>("/api/conversation/end", {
+    method: "POST",
+    body: JSON.stringify({
+      ConversationId: conversationId,
+      SessionDuration: sessionDuration,
+    } satisfies ConversationEndRequest),
   });
 }
 

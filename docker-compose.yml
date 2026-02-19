@@ -13,15 +13,26 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=production
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=digitaltwin;Username=${DB_USER};Password=${DB_PASSWORD}
-      - JwtConfiguration__SecretKey=${JWT_SECRET_KEY}
+      - JwtConfiguration__PrivateKeyPath=/app/keys/jwt-private.pem
+      - JwtConfiguration__PublicKeyPath=/app/keys/jwt-public.pem
       - JwtConfiguration__Issuer=DigitalTwin
       - JwtConfiguration__Audience=DigitalTwin
       - JwtConfiguration__ExpiryInMinutes=60
       - Redis__ConnectionString=redis:${REDIS_PORT:-6379},password=${REDIS_PASSWORD}
       - RabbitMQ__ConnectionString=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/digitaltwin
-      - DeepFace__BaseUrl=http://deepface:8001
+      - Services__DeepFace__BaseUrl=http://deepface:8001
+      - Services__Avatar__BaseUrl=http://avatar-generation:8002
+      - Services__Voice__BaseUrl=http://voice-service:8003
       - Services__LLM__BaseUrl=http://llm-service:8004
+      - Services__ServiceKey=${SERVICE_API_KEY}
       - OTEL__ExporterOtlpEndpoint=http://jaeger:4317
+      - Encryption__Key=${ENCRYPTION_KEY}
+      - Stripe__SecretKey=${STRIPE_SECRET_KEY}
+      - Stripe__PlusPriceId=${STRIPE_PLUS_PRICE_ID}
+      - Stripe__PremiumPriceId=${STRIPE_PREMIUM_PRICE_ID}
+      - Stripe__WebhookSecret=${STRIPE_WEBHOOK_SECRET}
+      - Stripe__SuccessUrl=${STRIPE_SUCCESS_URL}
+      - Stripe__CancelUrl=${STRIPE_CANCEL_URL}
     depends_on:
       - postgres
       - redis

@@ -1,0 +1,28 @@
+# Development Dockerfile for .NET API with hot-reload support
+FROM mcr.microsoft.com/dotnet/sdk:8.0
+
+WORKDIR /src
+
+# Install useful development tools
+RUN dotnet tool install --global dotnet-watch
+ENV PATH="$PATH:/root/.dotnet/tools"
+
+# Copy project files for restore
+COPY ["src/API/DigitalTwin.API/DigitalTwin.API.csproj", "src/API/DigitalTwin.API/"]
+COPY ["src/Core/DigitalTwin.Core/DigitalTwin.Core.csproj", "src/Core/DigitalTwin.Core/"]
+COPY ["src/Infrastructure/DigitalTwin.Infrastructure/DigitalTwin.Infrastructure.csproj", "src/Infrastructure/DigitalTwin.Infrastructure/"]
+
+# Restore NuGet packages
+RUN dotnet restore "src/API/DigitalTwin.API/DigitalTwin.API.csproj"
+
+# Copy all source files (will be overridden by volume mount in dev)
+COPY . .
+
+EXPOSE 80
+
+ENV ASPNETCORE_ENVIRONMENT=Development
+ENV DOTNET_USE_POLLING_FILE_WATCHER=true
+
+WORKDIR /src/src/API/DigitalTwin.API
+
+ENTRYPOINT ["dotnet", "watch", "run", "--urls", "http://+:80"]

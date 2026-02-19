@@ -35,12 +35,10 @@ namespace DigitalTwin.Core.Data
         public DbSet<AITwinInteraction> AITwinInteractions { get; set; }
         public DbSet<AITwinMemory> AITwinMemories { get; set; }
 
-        // Building Entities
-        public DbSet<Building> Buildings { get; set; }
-        public DbSet<Floor> Floors { get; set; }
-        public DbSet<Room> Rooms { get; set; }
-        public DbSet<Equipment> Equipment { get; set; }
-        public DbSet<Sensor> Sensors { get; set; }
+        // Conversation Entities
+        public DbSet<ConversationSession> ConversationSessions { get; set; }
+        public DbSet<ConversationMessage> ConversationMessages { get; set; }
+        public DbSet<ConversationMemory> ConversationMemories { get; set; }
 
         // Emotional Entities
         public DbSet<EmotionalMemory> EmotionalMemories { get; set; }
@@ -158,52 +156,44 @@ namespace DigitalTwin.Core.Data
                         v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions)null));
             });
 
-            // Configure Building
-            modelBuilder.Entity<Building>(entity =>
+            // Configure ConversationSession
+            modelBuilder.Entity<ConversationSession>(entity =>
             {
                 entity.HasKey(e => e.Id);
-                entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
-                entity.Property(e => e.Address).HasMaxLength(500);
+                entity.Property(e => e.UserId).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.StartedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasMany(e => e.Messages).WithOne().OnDelete(DeleteBehavior.Cascade);
+                entity.Property(e => e.SessionContext)
+                    .HasConversion(
+                        v => JsonSerializer.Serialize(v, (JsonSerializerOptions)null),
+                        v => JsonSerializer.Deserialize<Dictionary<string, object>>(v, (JsonSerializerOptions)null));
+                entity.Property(e => e.ConversationContext)
+                    .HasConversion(
+                        v => JsonSerializer.Serialize(v, (JsonSerializerOptions)null),
+                        v => JsonSerializer.Deserialize<Dictionary<string, object>>(v, (JsonSerializerOptions)null));
+                entity.HasIndex(e => e.UserId);
+                entity.HasIndex(e => e.IsActive);
+            });
+
+            // Configure ConversationMessage
+            modelBuilder.Entity<ConversationMessage>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Role).IsRequired().HasMaxLength(20);
+                entity.Property(e => e.Timestamp).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            });
+
+            // Configure ConversationMemory
+            modelBuilder.Entity<ConversationMemory>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.UserId).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.Key).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.Value).IsRequired();
                 entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-                entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-                entity.HasIndex(e => e.Name);
-            });
-
-            // Configure Floor
-            modelBuilder.Entity<Floor>(entity =>
-            {
-                entity.HasKey(e => e.Id);
-                entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
-                entity.HasOne<Building>().WithMany(b => b.Floors).HasForeignKey(e => e.BuildingId);
-                entity.HasIndex(e => new { e.BuildingId, e.Number }).IsUnique();
-            });
-
-            // Configure Room
-            modelBuilder.Entity<Room>(entity =>
-            {
-                entity.HasKey(e => e.Id);
-                entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
-                entity.Property(e => e.Type).HasMaxLength(100);
-                entity.HasOne<Floor>().WithMany(f => f.Rooms).HasForeignKey(e => e.FloorId);
-            });
-
-            // Configure Equipment
-            modelBuilder.Entity<Equipment>(entity =>
-            {
-                entity.HasKey(e => e.Id);
-                entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
-                entity.Property(e => e.Type).HasMaxLength(100);
-                entity.HasOne<Room>().WithMany(r => r.Equipment).HasForeignKey(e => e.RoomId);
-            });
-
-            // Configure Sensor
-            modelBuilder.Entity<Sensor>(entity =>
-            {
-                entity.HasKey(e => e.Id);
-                entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
-                entity.Property(e => e.Status).HasMaxLength(50);
-                entity.HasOne<Room>().WithMany(r => r.Sensors).HasForeignKey(e => e.RoomId);
-                entity.HasIndex(e => new { e.RoomId, e.Type });
+                entity.Property(e => e.Importance).HasDefaultValue(0.5);
+                entity.HasIndex(e => e.UserId);
+                entity.HasIndex(e => new { e.UserId, e.Key });
             });
 
             // Configure Subscription

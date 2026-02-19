@@ -39,7 +39,7 @@ namespace DigitalTwin.API.Controllers
                     content.Add(streamContent, file.Name, file.FileName);
                 }
 
-                var response = await client.PostAsync("/analyze-face", content);
+                var response = await client.PostAsync("/analyze/facial-expression", content);
                 var responseContent = await response.Content.ReadAsStringAsync();
 
                 if (!response.IsSuccessStatusCode)

@@ -49,7 +49,7 @@ namespace DigitalTwin.API.Controllers
                         content.Add(new StringContent(field.Value.ToString()), field.Key);
                 }
 
-                var response = await client.PostAsync("/generate", content);
+                var response = await client.PostAsync("/avatar/generate", content);
                 var responseContent = await response.Content.ReadAsStringAsync();
 
                 return Content(responseContent, "application/json");

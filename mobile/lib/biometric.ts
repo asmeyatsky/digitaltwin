@@ -1,4 +1,8 @@
 import { Platform } from "react-native";
+import { useAuthStore } from "./store";
+
+const API_BASE =
+  process.env.EXPO_PUBLIC_API_URL || "http://localhost:8080";
 
 export interface BiometricData {
   type: string;
@@ -297,4 +301,39 @@ export async function fetchBiometricData(): Promise<BiometricData[]> {
     return fetchGoogleFitData();
   }
   return [];
+}
+
+/**
+ * Sync collected biometric readings to the backend via POST /api/biometric/sync.
+ * Collects data from the platform health provider and pushes it in a single batch.
+ */
+export async function syncBiometricData(): Promise<void> {
+  const readings = await fetchBiometricData();
+  if (readings.length === 0) return;
+
+  const token = useAuthStore.getState().token;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const body = readings.map((r) => ({
+    type: r.type,
+    value: r.value,
+    unit: r.unit,
+    source: r.source,
+    timestamp: r.timestamp,
+  }));
+
+  const res = await fetch(`${API_BASE}/api/biometric/sync`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Biometric sync failed with status ${res.status}`);
+  }
 }

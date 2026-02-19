@@ -52,10 +52,9 @@ export default function ChatScreen() {
   const handleVoiceRecording = useCallback(
     async (audioBase64: string) => {
       try {
-        await sendMessage({
-          content: "[Voice message]",
-          audioBase64,
-        });
+        // Voice audio is handled via the /api/voice/stt endpoint separately;
+        // send the transcribed placeholder as a text message for now.
+        await sendMessage({ content: "[Voice message]" });
       } catch (err) {
         console.error("Voice send failed:", err);
       }

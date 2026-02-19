@@ -47,7 +47,7 @@ spec:
   - to:
     - podSelector:
         matchLabels:
-          app: postgres
+          app: digitaltwin-postgres
     ports:
     - protocol: TCP
       port: 5432
@@ -55,7 +55,7 @@ spec:
   - to:
     - podSelector:
         matchLabels:
-          app: redis
+          app: digitaltwin-redis
     ports:
     - protocol: TCP
       port: 6379
@@ -63,7 +63,7 @@ spec:
   - to:
     - podSelector:
         matchLabels:
-          app: rabbitmq
+          app: digitaltwin-rabbitmq
     ports:
     - protocol: TCP
       port: 5672
@@ -73,25 +73,25 @@ spec:
   - to:
     - podSelector:
         matchLabels:
-          app: deepface
+          app: digitaltwin-deepface
     - podSelector:
         matchLabels:
-          app: avatar
+          app: digitaltwin-avatar
     - podSelector:
         matchLabels:
-          app: voice
+          app: digitaltwin-voice
     - podSelector:
         matchLabels:
-          app: llm
+          app: digitaltwin-llm
     ports:
-    - protocol: TCP
-      port: 8000
     - protocol: TCP
       port: 8001
     - protocol: TCP
       port: 8002
     - protocol: TCP
       port: 8003
+    - protocol: TCP
+      port: 8004
   # Allow all egress within the namespace
   - to:
     - podSelector: {}
@@ -107,13 +107,13 @@ spec:
     - key: app
       operator: In
       values:
-      - postgres
-      - redis
-      - rabbitmq
-      - deepface
-      - avatar
-      - voice
-      - llm
+      - digitaltwin-postgres
+      - digitaltwin-redis
+      - digitaltwin-rabbitmq
+      - digitaltwin-deepface
+      - digitaltwin-avatar
+      - digitaltwin-voice
+      - digitaltwin-llm
   policyTypes:
   - Ingress
   ingress:

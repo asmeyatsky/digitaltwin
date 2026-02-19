@@ -263,7 +263,7 @@ namespace DigitalTwin.API
                 options.AddPolicy("Default", policy =>
                 {
                     policy.WithOrigins(allowedOrigins)
-                          .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                          .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                           .WithHeaders("Content-Type", "Authorization", "X-Service-Key")
                           .AllowCredentials();
                 });

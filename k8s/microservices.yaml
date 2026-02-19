@@ -17,6 +17,10 @@ spec:
     metadata:
       labels:
         app: digitaltwin-deepface
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8001"
+        prometheus.io/path: "/metrics"
     spec:
       securityContext:
         runAsNonRoot: true
@@ -95,6 +99,10 @@ spec:
     metadata:
       labels:
         app: digitaltwin-avatar
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8002"
+        prometheus.io/path: "/metrics"
     spec:
       securityContext:
         runAsNonRoot: true
@@ -193,6 +201,10 @@ spec:
     metadata:
       labels:
         app: digitaltwin-voice
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8003"
+        prometheus.io/path: "/metrics"
     spec:
       securityContext:
         runAsNonRoot: true
@@ -274,6 +286,10 @@ spec:
     metadata:
       labels:
         app: digitaltwin-llm
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8004"
+        prometheus.io/path: "/metrics"
     spec:
       securityContext:
         runAsNonRoot: true

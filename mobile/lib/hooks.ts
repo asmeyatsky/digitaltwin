@@ -20,6 +20,7 @@ export function useAuth() {
       email: string;
       password: string;
     }) => {
+      // Server expects Username, not email — pass email value as the username
       const res = await api.login(email, password);
       if (!res.success) throw new Error(res.message ?? "Login failed");
       return res.data;
@@ -46,7 +47,17 @@ export function useAuth() {
       password: string;
       displayName: string;
     }) => {
-      const res = await api.register(email, password, displayName);
+      // Map mobile form fields to server RegisterRequest shape
+      const nameParts = displayName.trim().split(/\s+/);
+      const firstName = nameParts[0] ?? "";
+      const lastName = nameParts.slice(1).join(" ") || firstName;
+      const res = await api.register({
+        Username: email,
+        Email: email,
+        Password: password,
+        FirstName: firstName,
+        LastName: lastName,
+      });
       if (!res.success) throw new Error(res.message ?? "Registration failed");
       return res.data;
     },
@@ -92,26 +103,30 @@ export function useConversation() {
   const emotionStore = useEmotionStore();
   const queryClient = useQueryClient();
 
-  const conversationsQuery = useQuery({
-    queryKey: ["conversations"],
-    queryFn: async () => {
-      const res = await api.listConversations();
-      if (res.success) chatStore.setConversations(res.data);
-      return res.data;
-    },
-    enabled: useAuthStore.getState().isAuthenticated,
-  });
+  // No server-side list endpoint; conversations are tracked locally
+  const conversationsQuery = {
+    isLoading: false,
+  };
 
   const startConversationMutation = useMutation({
-    mutationFn: async () => {
-      const res = await api.startConversation();
+    mutationFn: async (message: string) => {
+      const res = await api.startConversation(message);
       if (!res.success) throw new Error(res.message ?? "Failed to start conversation");
       return res.data;
     },
-    onSuccess: (conv) => {
+    onSuccess: (data) => {
+      // Map server ConversationStartResponse to local Conversation shape
+      const conv: api.Conversation = {
+        id: data.SessionId,
+        userId: "",
+        title: "New Conversation",
+        createdAt: data.Timestamp,
+        updatedAt: data.Timestamp,
+        messageCount: 1,
+        lastEmotion: data.EmotionalTone,
+      };
       chatStore.setActiveConversation(conv);
       chatStore.setMessages([]);
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
     },
   });
 
@@ -119,14 +134,28 @@ export function useConversation() {
     async (conversationId: string) => {
       const res = await api.getConversationHistory(conversationId);
       if (res.success) {
-        chatStore.setMessages(res.data);
-        // Set last emotion from history
-        const lastEmotionMsg = [...res.data]
-          .reverse()
-          .find((m) => m.emotion);
-        if (lastEmotionMsg?.emotion) {
-          emotionStore.setCurrentEmotion(lastEmotionMsg.emotion);
+        const history = res.data;
+        // Map server ConversationMessage[] to local Message[] for the chat store
+        const mapped: api.Message[] = [];
+        for (const m of history.Messages) {
+          mapped.push({
+            id: m.Id,
+            conversationId,
+            role: "user",
+            content: m.Content,
+            timestamp: m.Timestamp,
+          });
+          if (m.Response) {
+            mapped.push({
+              id: `${m.Id}-resp`,
+              conversationId,
+              role: "assistant",
+              content: m.Response,
+              timestamp: m.Timestamp,
+            });
+          }
         }
+        chatStore.setMessages(mapped);
       }
     },
     [chatStore, emotionStore]
@@ -135,19 +164,38 @@ export function useConversation() {
   const sendMessageMutation = useMutation({
     mutationFn: async ({
       content,
-      audioBase64,
     }: {
       content: string;
-      audioBase64?: string;
     }) => {
       let conversationId = chatStore.activeConversation?.id;
 
       if (!conversationId) {
-        const startRes = await api.startConversation();
+        // Start a new conversation with the first message
+        const startRes = await api.startConversation(content);
         if (!startRes.success)
           throw new Error("Failed to start conversation");
-        chatStore.setActiveConversation(startRes.data);
-        conversationId = startRes.data.id;
+        const conv: api.Conversation = {
+          id: startRes.data.SessionId,
+          userId: "",
+          title: "New Conversation",
+          createdAt: startRes.data.Timestamp,
+          updatedAt: startRes.data.Timestamp,
+          messageCount: 1,
+          lastEmotion: startRes.data.EmotionalTone,
+        };
+        chatStore.setActiveConversation(conv);
+        conversationId = startRes.data.SessionId;
+
+        // The start endpoint already returns a greeting response
+        chatStore.setIsSending(false);
+        return {
+          Response: startRes.data.Response,
+          DetectedEmotion: startRes.data.EmotionalTone,
+          AIEmotionalTone: startRes.data.EmotionalTone,
+          ResponseTime: startRes.data.Timestamp,
+          ConversationId: conversationId,
+          _initialMessage: content,
+        } as api.ConversationMessageResponse & { _initialMessage?: string };
       }
 
       chatStore.setIsSending(true);
@@ -162,24 +210,41 @@ export function useConversation() {
       };
       chatStore.addMessage(tempUserMsg);
 
-      const res = await api.sendMessage({
-        conversationId: conversationId!,
-        content,
-        audioBase64,
-      });
+      const res = await api.sendMessage(conversationId!, content);
 
       if (!res.success) throw new Error(res.message ?? "Failed to send message");
-      return res.data;
+      return { ...res.data, _initialMessage: undefined } as api.ConversationMessageResponse & { _initialMessage?: string };
     },
     onSuccess: (data) => {
-      // Replace temp user message and add assistant reply
+      // Replace temp user message and add user + assistant messages
       const messages = chatStore.messages.filter(
         (m) => !m.id.startsWith("temp-")
       );
-      chatStore.setMessages([...messages, data.userMessage, data.assistantMessage]);
-      emotionStore.pushEmotion(data.emotion);
+
+      const convId = data.ConversationId;
+      const now = data.ResponseTime;
+
+      // If this was the initial message via startConversation, add both user and assistant
+      if (data._initialMessage) {
+        messages.push({
+          id: `user-${Date.now()}`,
+          conversationId: convId,
+          role: "user",
+          content: data._initialMessage,
+          timestamp: now,
+        });
+      }
+
+      messages.push({
+        id: `assistant-${Date.now()}`,
+        conversationId: convId,
+        role: "assistant",
+        content: data.Response,
+        timestamp: now,
+      });
+
+      chatStore.setMessages(messages);
       chatStore.setIsSending(false);
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
     },
     onError: () => {
       // Remove temp messages on failure

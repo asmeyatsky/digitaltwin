@@ -13,6 +13,8 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=development
       - ASPNETCORE_URLS=http://+:80;https://+:443
+      - ConnectionStrings__DefaultConnection=Host=postgres-dev;Port=5432;Database=${DB_NAME:-digitaltwin_dev};Username=${DB_USER:-devuser};Password=${DB_PASSWORD}
+      - Redis__ConnectionString=redis-dev:6379
     volumes:
       - .:/src
       - ./logs:/app/logs
