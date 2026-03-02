@@ -28,6 +28,8 @@ Thumbs.db
 # Node
 node_modules/
 .expo/
+.next/
+*.tsbuildinfo
 
 # Logs
 *.log
