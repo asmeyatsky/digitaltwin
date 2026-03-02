@@ -18,15 +18,15 @@ export interface ApiResponse<T> {
 }
 
 export interface LoginResponseRaw {
-  Success: boolean;
-  Message?: string;
-  Token?: string;
-  RefreshToken?: string;
-  ExpiresIn: number;
-  User?: {
-    UserId: string;
-    Username: string;
-    Roles: string[];
+  success: boolean;
+  message?: string;
+  token?: string;
+  refreshToken?: string;
+  expiresIn: number;
+  user?: {
+    userId: string;
+    username: string;
+    roles: string[];
   };
 }
 
@@ -240,17 +240,17 @@ export async function login(
 
   const raw: LoginResponseRaw = await res.json();
 
-  if (!res.ok || !raw.Success) {
-    throw new Error(raw.Message ?? `Login failed with status ${res.status}`);
+  if (!res.ok || !raw.success) {
+    throw new Error(raw.message ?? `Login failed with status ${res.status}`);
   }
 
   return {
-    token: raw.Token!,
-    refreshToken: raw.RefreshToken!,
+    token: raw.token!,
+    refreshToken: raw.refreshToken!,
     user: {
-      id: raw.User!.UserId,
-      username: raw.User!.Username,
-      roles: raw.User!.Roles,
+      id: raw.user!.userId,
+      username: raw.user!.username,
+      roles: raw.user!.roles,
     },
   };
 }

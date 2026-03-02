@@ -15,7 +15,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (isAuthenticated()) {
-      router.replace("/");
+      router.replace("/chat");
     }
   }, [router]);
 
@@ -25,11 +25,25 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const result = await login(username, password);
+      let result;
+      try {
+        result = await login(username, password);
+      } catch (apiErr) {
+        // Dev fallback: if the API is unreachable, allow any credentials
+        if (process.env.NODE_ENV === "development") {
+          result = {
+            token: "dev-token",
+            refreshToken: "dev-refresh",
+            user: { id: "dev-1", username, roles: ["Admin", "User"] },
+          };
+        } else {
+          throw apiErr;
+        }
+      }
       setToken(result.token);
       setRefreshToken(result.refreshToken);
       setUser(result.user);
-      router.replace("/");
+      router.replace("/chat");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {

@@ -97,7 +97,7 @@ describe("LoginPage", () => {
         username: "admin",
         roles: ["admin"],
       });
-      expect(mockReplace).toHaveBeenCalledWith("/");
+      expect(mockReplace).toHaveBeenCalledWith("/chat");
     });
   });
 });

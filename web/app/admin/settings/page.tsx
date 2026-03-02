@@ -58,7 +58,7 @@ export default function SettingsPage() {
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <a
-              href="http://localhost:3000"
+              href="http://localhost:3001"
               target="_blank"
               rel="noopener noreferrer"
               className="border border-warmgray-200 rounded-lg p-4 hover:border-primary-300 hover:shadow-sm transition-all group"

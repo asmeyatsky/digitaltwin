@@ -111,11 +111,11 @@ describe("login", () => {
       status: 200,
       json: () =>
         Promise.resolve({
-          Success: true,
-          Token: "tok",
-          RefreshToken: "ref",
-          ExpiresIn: 3600,
-          User: { UserId: "1", Username: "admin", Roles: ["admin"] },
+          success: true,
+          token: "tok",
+          refreshToken: "ref",
+          expiresIn: 3600,
+          user: { userId: "1", username: "admin", roles: ["admin"] },
         }),
     });
 
@@ -132,11 +132,11 @@ describe("login", () => {
       status: 200,
       json: () =>
         Promise.resolve({
-          Success: true,
-          Token: "tok",
-          RefreshToken: "ref",
-          ExpiresIn: 3600,
-          User: { UserId: "u1", Username: "alice", Roles: ["user"] },
+          success: true,
+          token: "tok",
+          refreshToken: "ref",
+          expiresIn: 3600,
+          user: { userId: "u1", username: "alice", roles: ["user"] },
         }),
     });
 
@@ -151,7 +151,7 @@ describe("login", () => {
     mockFetch().mockResolvedValueOnce({
       ok: false,
       status: 401,
-      json: () => Promise.resolve({ Success: false, Message: "Bad credentials" }),
+      json: () => Promise.resolve({ success: false, message: "Bad credentials" }),
     });
 
     await expect(login("admin", "wrong")).rejects.toThrow("Bad credentials");
