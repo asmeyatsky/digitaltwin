@@ -5,6 +5,9 @@ on:
   pull_request:
     branches: [ main ]
 
+
+permissions:
+  contents: read
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
@@ -60,7 +63,7 @@ jobs:
         python -m pytest tests/ -v --cov=services --cov-report=xml --cov-report=html
         
     - name: Upload test coverage
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@ab904c41d6ece82784817410c45d8b8c02684457  # v3
       with:
         files: ./coverage.xml,./coverage.xml
         
@@ -98,7 +101,7 @@ jobs:
         docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/voice-service:$IMAGE_TAG -f services/voice-service/Dockerfile services/voice-service/
         
     - name: Log in to Container Registry
-      uses: docker/login-action@v2
+      uses: docker/login-action@465a07811f14bebb1938fbed4728c6a1ff8901fc  # v2
       with:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
@@ -115,7 +118,7 @@ jobs:
         
     - name: Extract metadata
       id: meta
-      uses: docker/metadata-action@v4
+      uses: docker/metadata-action@818d4b7b91585d195f67373fd9cb0332e31a7175  # v4
       with:
         images: |
           ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/api-gateway:${{ github.sha }}
@@ -241,7 +244,7 @@ jobs:
       uses: actions/checkout@v4
       
     - name: Container security scanning
-      uses: aquasecurity/trivy-action@master
+      uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # master
       with:
         image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/api-gateway:${{ needs.test-and-build.outputs.image-tag }}
         format: 'sarif'
@@ -254,7 +257,7 @@ jobs:
         pip-audit --output audit-report.json
         
     - name: Code security scanning
-      uses: semgrep/semgrep-action@v1
+      uses: semgrep/semgrep-action@713efdd345f3035192eaa63f56867b88e63e4e5d  # v1
       with:
         config: >-
           p/security-audit
